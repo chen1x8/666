@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>热气球原理演示</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+            margin: 20px;
+        }
+        h1 { color: #333; }
+        .container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border-radius: 8px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .control-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        label {
+            font-weight: bold;
+            color: #444;
+            display: block;
+            margin-bottom: 8px;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .dashboard {
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            color: #555;
+            line-height: 1.6;
+        }
+        .val-highlight {
+            color: #d9534f;
+            font-weight: bold;
+        }
+        #info {
+            max-width: 800px;
+            margin-top: 20px;
+            color: #666;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>热气球物理原理模拟</h1>
+
+    <div class="container">
+        <canvas id="skyCanvas" width="400" height="500"></canvas>
+        
+        <div class="controls">
+            <div class="control-panel">
+                <label for="burnerSlider">🔥 燃烧器火力: <span id="burnerVal" class="val-highlight">0</span>%</label>
+                <input type="range" id="burnerSlider" min="0" max="100" value="0">
+                <p style="font-size: 12px; color: #888;">向上滑动增加火力，加热内部空气。</p>
+            </div>
+
+            <div class="control-panel">
+                <label>📊 实时数据监控</label>
+                <div class="dashboard">
+                    <div>内部温度: <span id="tempVal">20</span> °C</div>
+                    <div>空气密度: <span id="densityVal">正常</span></div>
+                    <div>净 受 力: <span id="forceVal">向下 (重力主导)</span></div>
+                    <div>当前高度: <span id="altVal">0</span> m</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>物理机制说明：</strong><br>
+        1. <strong>常温状态：</strong> 气球内部空气密度与外部一致，整体加上吊篮的重量，重力大于浮力，停留在地面。<br>
+        2. <strong>加热状态：</strong> 燃烧器开启，气球内部温度（Temp）上升。气体分子动能增加（动画中的小点运动变快），体积膨胀，部分空气溢出。内部气体密度减小，产生的浮力逐渐超过重力，气球上升。<br>
+        3. <strong>冷却状态：</strong> 关闭燃烧器，热空气逐渐通过球壁散热，温度下降，密度恢复，浮力减小，气球缓慢下降。
+    </div>
+
+<script>
+    const canvas = document.getElementById('skyCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI 元素
+    const burnerSlider = document.getElementById('burnerSlider');
+    const burnerValDisp = document.getElementById('burnerVal');
+    const tempValDisp = document.getElementById('tempVal');
+    const densityValDisp = document.getElementById('densityVal');
+    const forceValDisp = document.getElementById('forceVal');
+    const altValDisp = document.getElementById('altVal');
+
+    // 物理与状态参数
+    const ambientTemp = 20; // 环境温度
+    let internalTemp = 20;  // 气球内部温度
+    let burnerPower = 0;    // 火力 (0-100)
+    
+    // 气球参数
+    let balloonY = canvas.height - 120; // 初始Y坐标 (越小越高)
+    let balloonVy = 0; // 垂直速度
+    const balloonRadius = 60;
+    const groundY = canvas.height - 120; // 地面高度限制
+
+    // 空气分子 (粒子系统)
+    const particles = [];
+    const numParticles = 80;
+    for (let i = 0; i < numParticles; i++) {
+        // 在气球圆形范围内随机生成
+        const angle = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * (balloonRadius - 5);
+        particles.push({
+            x: r * Math.cos(angle), // 相对于气球中心的 x
+            y: r * Math.sin(angle), // 相对于气球中心的 y
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2
+        });
+    }
+
+    // 交互监听
+    burnerSlider.addEventListener('input', (e) => {
+        burnerPower = parseInt(e.target.value);
+        burnerValDisp.textContent = burnerPower;
+    });
+
+    function updatePhysics() {
+        // 1. 温度更新逻辑
+        // 加热使温度上升，同时有自然散热
+        internalTemp += (burnerPower * 0.05) - ((internalTemp - ambientTemp) * 0.015);
+        if (internalTemp < ambientTemp) internalTemp = ambientTemp;
+
+        // 2. 动力学计算
+        // 假设 hover (悬停) 温度为 60 度。
+        // T < 60: 净力向下; T > 60: 净力向上
+        const hoverTemp = 60;
+        let liftForce = (internalTemp - hoverTemp) * 0.002; 
+        
+        balloonVy += liftForce; // 施加加速度
+        balloonVy *= 0.92;      // 空气阻力 (摩擦衰减)
+        
+        balloonY -= balloonVy;  // 更新位置 (Canvas坐标系Y轴向下)
+
+        // 碰撞检测 (地面和天空顶端)
+        if (balloonY > groundY) {
+            balloonY = groundY;
+            balloonVy = 0;
+        }
+        if (balloonY < balloonRadius + 20) {
+            balloonY = balloonRadius + 20;
+            balloonVy = 0;
+        }
+
+        // 3. 更新微观粒子 (温度越高，粒子运动越快)
+        const speedMultiplier = 1 + (internalTemp - ambientTemp) * 0.05;
+        particles.forEach(p => {
+            p.x += p.vx * speedMultiplier;
+            p.y += p.vy * speedMultiplier;
+
+            // 限制在气球内部 (简单的圆形反弹)
+            const dist = Math.sqrt(p.x * p.x + p.y * p.y);
+            if (dist > balloonRadius - 5) {
+                // 粗略的反弹法向量计算
+                const nx = p.x / dist;
+                const ny = p.y / dist;
+                const dot = p.vx * nx + p.vy * ny;
+                p.vx = p.vx - 2 * dot * nx;
+                p.vy = p.vy - 2 * dot * ny;
+                // 防止卡在边缘
+                p.x = nx * (balloonRadius - 5);
+                p.y = ny * (balloonRadius - 5);
+            }
+        });
+
+        updateDashboard(liftForce);
+    }
+
+    function updateDashboard(netForce) {
+        tempValDisp.textContent = internalTemp.toFixed(1);
+        
+        let density = "正常";
+        let color = "#555";
+        if (internalTemp > 40) { density = "变小"; color = "#d9534f"; }
+        if (internalTemp > 80) { density = "极小"; color = "#c9302c"; }
+        densityValDisp.textContent = density;
+        densityValDisp.style.color = color;
+
+        if (balloonY >= groundY && netForce <= 0) {
+            forceValDisp.textContent = "向下 (支撑力平衡)";
+            forceValDisp.style.color = "#555";
+        } else if (netForce > 0.01) {
+            forceValDisp.textContent = "向上 (浮力 > 重力)";
+            forceValDisp.style.color = "#d9534f";
+        } else if (netForce < -0.01) {
+            forceValDisp.textContent = "向下 (浮力 < 重力)";
+            forceValDisp.style.color = "#0275d8";
+        } else {
+            forceValDisp.textContent = "平衡 (浮力 ≈ 重力)";
+            forceValDisp.style.color = "#5cb85c";
+        }
+
+        // 计算高度 (0 到 100)
+        let altitude = ((groundY - balloonY) / (groundY - balloonRadius - 20)) * 100;
+        altValDisp.textContent = altitude.toFixed(1);
+    }
+
+    function draw() {
+        // 清理并画背景 (天空渐变)
+        let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, "#87CEEB"); // 天蓝
+        grad.addColorStop(1, "#E0F6FF"); // 浅蓝
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 画地面
+        ctx.fillStyle = "#8FBC8F"; // 暗海绿
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+
+        // --- 绘制热气球 ---
+        const bx = canvas.width / 2;
+        const by = balloonY;
+
+        // 画绳子
+        ctx.beginPath();
+        ctx.strokeStyle = "#888";
+        ctx.lineWidth = 1;
+        ctx.moveTo(bx - 20, by + 40);
+        ctx.lineTo(bx - 15, by + 80);
+        ctx.moveTo(bx + 20, by + 40);
+        ctx.lineTo(bx + 15, by + 80);
+        ctx.stroke();
+
+        // 画吊篮
+        ctx.fillStyle = "#D2B48C"; // 棕褐色
+        ctx.fillRect(bx - 15, by + 80, 30, 20);
+        ctx.strokeStyle = "#8B4513";
+        ctx.strokeRect(bx - 15, by + 80, 30, 20);
+
+        // 画火焰 (根据 burnerPower)
+        if (burnerPower > 0) {
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(255, ${150 - burnerPower}, 0, 0.8)`;
+            ctx.moveTo(bx - 10, by + 50);
+            ctx.lineTo(bx, by + 50 - (burnerPower * 0.4)); // 火焰高度随火力变化
+            ctx.lineTo(bx + 10, by + 50);
+            ctx.fill();
+        }
+
+        // 画气球本体 (Envelope)
+        ctx.beginPath();
+        ctx.arc(bx, by, balloonRadius, 0, Math.PI * 2);
+        
+        // 气球颜色随温度微变，变热时略微偏红
+        let heatColor = Math.min(255, 100 + (internalTemp - ambientTemp) * 1.5);
+        ctx.fillStyle = `rgba(${heatColor}, 150, 200, 0.8)`; 
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#333";
+        ctx.stroke();
+
+        // 画内部分子 (粒子)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+        particles.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(bx + p.x, by + p.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function animate() {
+        updatePhysics();
+        draw();
+        requestAnimationFrame(animate);
+    }
+
+    // 启动动画
+    animate();
+</script>
+
+</body>
+</html>
