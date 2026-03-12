@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>冰块熔化液面变化物理模型（严谨两阶段填坑版）</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f6f9;
+            margin: 20px;
+            color: #2c3e50;
+        }
+        h1 { margin-bottom: 5px; color: #1a252f; }
+        .subtitle { color: #7f8c8d; margin-bottom: 20px; font-size: 15px; }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        canvas {
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.04), 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        .controls {
+            width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            padding: 18px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        label {
+            font-weight: 600;
+            color: #34495e;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #3498db;
+            height: 8px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 13.5px;
+            text-align: center;
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid #bdc3c7;
+            padding: 8px 4px;
+        }
+
+        .data-table th {
+            background-color: #ecf0f1;
+            color: #34495e;
+            font-weight: 600;
+        }
+
+        .col-rise { background-color: #ffebee; }   
+        .col-same { background-color: #e8f5e9; }   
+        .col-drop { background-color: #fff3e0; }   
+
+        .val-highlight { color: #e74c3c; font-weight: bold; font-size: 16px; }
+        .formula { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: bold; }
+
+        #info {
+            max-width: 1000px;
+            margin-top: 25px;
+            color: #555;
+            line-height: 1.7;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+            font-size: 15px;
+        }
+        
+        .highlight-text {
+            color: #2980b9;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>经典物理：冰块熔化液面变化模型</h1>
+    <div class="subtitle">严谨思想实验版：通过两阶段动画，完美揭示 V排 与 V水 的博弈</div>
+
+    <div class="container">
+        <!-- 左侧：物理视觉化画布 -->
+        <canvas id="simCanvas" width="550" height="400"></canvas>
+        
+        <!-- 右侧：控制台与数据表 -->
+        <div class="controls">
+            <div class="control-panel">
+                <label for="meltSlider">
+                    <span>🌡️ 实验进度 (融化 + 坍塌):</span>
+                    <span id="meltVal" class="val-highlight">0%</span>
+                </label>
+                <input type="range" id="meltSlider" min="0" max="100" value="0">
+                <p style="font-size: 12.5px; color: #7f8c8d; margin-top: 8px; line-height: 1.5;">
+                    <strong>阶段一 (0~80%)：</strong>冰在红色的刚性坑($V_{排}$)内融化。注意：由于坑挡住了外面的液体，此时<strong>外部液面绝对静止！</strong>（直到盐水从坑中溢出）。<br>
+                    <strong>阶段二 (80~100%)：</strong>坑壁消失（恢复真实物理状态）。由于酒精坑未被填满，周围的酒精瞬间<strong>倒灌</strong>填补空隙，导致液面此时才下降！
+                </p>
+            </div>
+
+            <div class="control-panel" style="padding: 12px;">
+                <div style="font-weight: 600; color: #34495e; margin-bottom: 5px;">📊 填坑逻辑与结果推导</div>
+                <table class="data-table">
+                    <tr>
+                        <th>参数 / 液体</th>
+                        <th class="col-rise">浓盐水 (<span class="formula">ρ</span>=1.2)</th>
+                        <th class="col-same">纯水 (<span class="formula">ρ</span>=1.0)</th>
+                        <th class="col-drop">酒精 (<span class="formula">ρ</span>=0.8)</th>
+                    </tr>
+                    <tr>
+                        <td>原占用的坑<br><b><span class="formula">V<sub>排</sub></span></b></td>
+                        <td class="col-rise">m / <span class="formula">ρ<sub>盐水</sub></span><br>= 90/1.2 = <b>75</b></td>
+                        <td class="col-same">m / <span class="formula">ρ<sub>水</sub></span><br>= 90/1.0 = <b>90</b></td>
+                        <td class="col-drop">全没入 = <span class="formula">V<sub>冰</sub></span><br>= 90/0.9 = <b>100</b></td>
+                    </tr>
+                    <tr>
+                        <td>化水后体积<br><b><span class="formula">V<sub>水</sub></span></b></td>
+                        <td class="col-rise">m / <span class="formula">ρ<sub>水</sub></span><br>= <b>90</b></td>
+                        <td class="col-same">m / <span class="formula">ρ<sub>水</sub></span><br>= <b>90</b></td>
+                        <td class="col-drop">m / <span class="formula">ρ<sub>水</sub></span><br>= <b>90</b></td>
+                    </tr>
+                    <tr>
+                        <td><b>坑的填充情况</b></td>
+                        <td class="col-rise" style="color:#e74c3c; font-weight:bold;">水溢出了坑<br><span class="formula">V<sub>水</sub> > V<sub>排</sub></span></td>
+                        <td class="col-same" style="color:#27ae60; font-weight:bold;">刚好填满<br><span class="formula">V<sub>水</sub> = V<sub>排</sub></span></td>
+                        <td class="col-drop" style="color:#d35400; font-weight:bold;">留有空隙<br><span class="formula">V<sub>水</sub> < V<sub>排</sub></span></td>
+                    </tr>
+                    <tr>
+                        <td><b>最终液面变化</b></td>
+                        <td class="col-rise" style="color:#e74c3c; font-weight:bold; font-size:16px;">上升 ↑</td>
+                        <td class="col-same" style="color:#27ae60; font-weight:bold; font-size:16px;">不变 -</td>
+                        <td class="col-drop" style="color:#d35400; font-weight:bold; font-size:16px;">下降 ↓</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>💡 严谨的可视化物理逻辑：</strong><br>
+        1. <strong>盐水（溢出上升）：</strong> 冰化成水的体积（90）大于它的坑（75）。在填坑阶段（0-80%），当水快要充满时，深蓝色的水会<strong>溢出</strong>坑外。这部分多出来的水直接导致了外部整体液面的<strong>上升</strong>。<br>
+        2. <strong>纯水（完美平衡）：</strong> 化成的水（90）与坑（90）完全相等。无论坑是否存在，水的体积都刚刚好填平原本的空缺，整体液面<strong>绝对不变</strong>。<br>
+        3. <strong>酒精（倒灌下降）：</strong> 冰在酒精中沉底砸出了大坑（100），但化成水只有 90。在填坑阶段（0-80%），外部液面是<strong>不动的</strong>（因为坑的边界撑住了周围液体）。在坍塌阶段（80-100%），坑的虚拟边界消失，周围的酒精为了填补顶部留下的那段<strong>白色空隙</strong>，瞬间发生倒灌，从而拉低了整体液面，导致液面<strong>下降</strong>。
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const meltSlider = document.getElementById('meltSlider');
+    const meltValDisp = document.getElementById('meltVal');
+
+    // 物理与几何常数
+    const INITIAL_WATER_LEVEL = 180;
+    const TANK_BOTTOM = 360;
+    const PIT_W = 46; 
+    const ICE_H = 80; 
+    const WATER_H = 72; // V水 = 90份
+
+    let meltProgress = 0;
+
+    // 坑深: 盐水(75份) = 60, 纯水(90份) = 72, 酒精(100份) = 80
+    let tanks = [
+        { x: 100, color: "rgba(46, 204, 113, 0.4)", name: "盐水", pitH: 60, float: true },
+        { x: 275, color: "rgba(52, 152, 219, 0.4)", name: "纯水", pitH: 72, float: true },
+        { x: 450, color: "rgba(241, 196, 15, 0.4)", name: "酒精", pitH: 80, float: false }
+    ];
+
+    meltSlider.addEventListener('input', (e) => {
+        meltProgress = e.target.value / 100;
+        meltValDisp.textContent = e.target.value + "%";
+    });
+
+    function drawRoundRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    }
+
+    function drawArrow(ctx, x, startY, endY, color) {
+        if (Math.abs(startY - endY) < 2) return;
+        const headlen = 8;
+        const angle = startY > endY ? -Math.PI/2 : Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.lineTo(x - headlen * Math.cos(angle - Math.PI / 6), endY - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(x, endY);
+        ctx.lineTo(x - headlen * Math.cos(angle + Math.PI / 6), endY - headlen * Math.sin(angle + Math.PI / 6));
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 两阶段逻辑
+        // phase1 (0~0.8): 冰在红色的刚性坑内融化
+        // phase2 (0.8~1.0): 红框消失，液体平衡/倒灌
+        let phase1 = Math.min(meltProgress / 0.8, 1.0);
+        let phase2 = Math.max(0, (meltProgress - 0.8) / 0.2);
+
+        for(let i = 0; i < 3; i++) {
+            const tank = tanks[i];
+            const tankWidth = 110;
+            const tx = tank.x - tankWidth/2;
+
+            // ================= 计算物理状态 =================
+            let currentWaterY = INITIAL_WATER_LEVEL;
+            let currentWaterInPit = WATER_H * phase1; // 灌入坑内的水量
+            let currentDh = 0; // 记录液面变化用于显示状态文本
+
+            if (i === 0) { // 盐水
+                // 阶段一就会发生溢出！
+                let overflow = Math.max(0, currentWaterInPit - tank.pitH);
+                currentWaterY = INITIAL_WATER_LEVEL - overflow * 1.5; // 液面上升
+                currentWaterInPit = Math.min(currentWaterInPit, tank.pitH); // 坑内最多装满
+                currentDh = -overflow;
+            } else if (i === 1) { // 纯水
+                currentWaterY = INITIAL_WATER_LEVEL; // 永远不变
+                currentDh = 0;
+            } else if (i === 2) { // 酒精
+                // 阶段一绝对不变化（刚性坑阻挡）。阶段二发生倒灌，液面下降
+                let dropAmount = 15 * phase2; 
+                currentWaterY = INITIAL_WATER_LEVEL + dropAmount; 
+                currentDh = dropAmount;
+            }
+
+            // ================= 绘制外围主体液体 =================
+            ctx.fillStyle = tank.color;
+            ctx.fillRect(tx, currentWaterY, tankWidth, TANK_BOTTOM - currentWaterY);
+            
+            // 液面线
+            ctx.beginPath();
+            ctx.moveTo(tx, currentWaterY);
+            ctx.lineTo(tx + tankWidth, currentWaterY);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // ================= 挖出 V排 的坑并灌水 =================
+            let pitX = tank.x - PIT_W/2;
+            let pitY = tank.float ? INITIAL_WATER_LEVEL : TANK_BOTTOM - tank.pitH;
+            
+            // 1. 清空坑，露出白色背景 (空的空间)
+            ctx.clearRect(pitX, pitY, PIT_W, tank.pitH);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+            ctx.fillRect(pitX, pitY, PIT_W, tank.pitH);
+
+            // 2. 酒精专属视觉：在阶段二，周围液体倒灌填补空隙
+            if (i === 2 && phase2 > 0) {
+                let gapH = tank.pitH - currentWaterInPit;
+                ctx.save();
+                ctx.globalAlpha = phase2; // 随着坍塌逐渐被液体填充
+                ctx.fillStyle = tank.color;
+                ctx.fillRect(pitX, pitY, PIT_W, gapH);
+                ctx.restore();
+            }
+
+            // 3. 灌入融化的深蓝色水 (V水)
+            let meltedY = pitY + tank.pitH - currentWaterInPit;
+            ctx.fillStyle = "rgba(41, 128, 185, 0.85)"; 
+            ctx.fillRect(pitX, meltedY, PIT_W, currentWaterInPit);
+            
+            // 标记 V水
+            if (currentWaterInPit > 15) {
+                ctx.fillStyle = "white";
+                ctx.textAlign = "center";
+                ctx.font = "bold 12px Arial";
+                ctx.fillText("V水", pitX + PIT_W/2, meltedY + currentWaterInPit/2 + 5);
+            }
+
+            // ================= 绘制坑的边界线 (阶段二消失) =================
+            ctx.save();
+            ctx.globalAlpha = 1 - phase2; // 在阶段二淡出，代表虚拟坑壁消失
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = "#e74c3c";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(pitX, pitY, PIT_W, tank.pitH);
+            
+            ctx.fillStyle = "#e74c3c";
+            ctx.font = "bold 13px Arial";
+            ctx.textAlign = "right";
+            ctx.fillText("V排", pitX - 5, pitY + tank.pitH/2);
+            ctx.restore();
+
+            // ================= 绘制逐渐变小的冰块 =================
+            let scale = Math.sqrt(1 - phase1); // 冰块在阶段一结束时刚好完全消失
+            if (scale > 0.05) {
+                let iceY = tank.float ? INITIAL_WATER_LEVEL - (ICE_H - tank.pitH) : TANK_BOTTOM - ICE_H;
+                let cx = tank.x;
+                let cy = iceY + ICE_H/2;
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.scale(scale, scale);
+                drawRoundRect(ctx, -PIT_W/2, -ICE_H/2, PIT_W, ICE_H, 4);
+                ctx.fillStyle = "rgba(173, 216, 230, 0.85)"; 
+                ctx.fill();
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(-PIT_W*0.3, -ICE_H*0.3);
+                ctx.lineTo(+PIT_W*0.2, +ICE_H*0.2);
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // ================= 画初始红色基准线 & 动态箭头 =================
+            ctx.beginPath();
+            ctx.moveTo(tx - 15, INITIAL_WATER_LEVEL);
+            ctx.lineTo(tx + tankWidth + 15, INITIAL_WATER_LEVEL);
+            ctx.strokeStyle = "rgba(231, 76, 60, 0.6)"; 
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            if (Math.abs(currentDh) > 1) {
+                let arrowColor = currentDh < 0 ? "#e74c3c" : "#d35400";
+                drawArrow(ctx, tx - 10, INITIAL_WATER_LEVEL, currentWaterY, arrowColor);
+            }
+
+            // 烧杯边框
+            ctx.strokeStyle = "#bdc3c7";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(tx, INITIAL_WATER_LEVEL - 50);
+            ctx.lineTo(tx, TANK_BOTTOM);
+            ctx.lineTo(tx + tankWidth, TANK_BOTTOM);
+            ctx.lineTo(tx + tankWidth, INITIAL_WATER_LEVEL - 50);
+            ctx.stroke();
+
+            // 底部标签与动态状态
+            ctx.fillStyle = "#34495e";
+            ctx.font = "bold 15px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(tank.name, tank.x, TANK_BOTTOM + 25);
+            
+            if (meltProgress > 0) {
+                let statusTxt = currentDh < -0.1 ? "液面上升" : (currentDh > 0.1 ? "液面下降" : "液面不变");
+                let statusColor = currentDh < -0.1 ? "#e74c3c" : (currentDh > 0.1 ? "#d35400" : "#27ae60");
+                ctx.fillStyle = statusColor;
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(statusTxt, tank.x, TANK_BOTTOM + 45);
+            }
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+
+</body>
+</html>
