@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>船只浮力与稳性物理模拟器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f2f5;
+            margin: 20px;
+            color: #333;
+        }
+        h1 { color: #2c3e50; margin-bottom: 10px; }
+        .subtitle { color: #7f8c8d; margin-bottom: 20px; font-size: 14px; }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+        }
+        
+        canvas {
+            border-radius: 8px;
+            background-color: #87CEEB; /* 天空蓝背景 */
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+        }
+        
+        .controls {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        label {
+            font-weight: bold;
+            color: #34495e;
+            display: block;
+            margin-bottom: 10px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #e67e22;
+        }
+        
+        .radio-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 5px;
+        }
+        
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        .dashboard {
+            margin-top: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 15px;
+            color: #2c3e50;
+            line-height: 1.8;
+            background: #eef2f5;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .val-highlight {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .val-blue { color: #2980b9; font-weight: bold; }
+        .val-green { color: #27ae60; font-weight: bold; }
+        
+        #info {
+            max-width: 900px;
+            margin-top: 25px;
+            color: #555;
+            line-height: 1.6;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>货轮浮力与吃水线物理模拟器</h1>
+    <div class="subtitle">基于阿基米德原理：浮力 = 排开液体的重力</div>
+
+    <div class="container">
+        <canvas id="oceanCanvas" width="500" height="500"></canvas>
+        
+        <div class="controls">
+            <div class="control-panel">
+                <label for="cargoSlider">📦 货物装载量: <span id="cargoVal" class="val-highlight">0</span>%</label>
+                <input type="range" id="cargoSlider" min="0" max="100" value="0">
+                <p style="font-size: 12px; color: #7f8c8d; margin-top: 8px;">增加货物会增大总重力，观察船体吃水深度的变化。</p>
+            </div>
+
+            <div class="control-panel">
+                <label>🌊 水域环境 (液体密度)</label>
+                <div class="radio-group">
+                    <label class="radio-item">
+                        <input type="radio" name="waterType" value="fresh" checked>
+                        内河淡水 (1.00 t/m³)
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="waterType" value="sea">
+                        海洋咸水 (1.03 t/m³)
+                    </label>
+                </div>
+                <p style="font-size: 12px; color: #7f8c8d; margin-top: 8px;">当满载货物时，尝试驶入海洋，观察海水密度带来的浮力优势。</p>
+            </div>
+
+            <div class="control-panel">
+                <label>📊 船舶实时遥测数据</label>
+                <div class="dashboard">
+                    <div>总重力 (质量): <span id="massVal" class="val-highlight">4000</span> 吨</div>
+                    <div>液体密度 (ρ): <span id="densityVal" class="val-blue">1.00</span> t/m³</div>
+                    <div>排开水体积 (V): <span id="volVal" class="val-green">4000.0</span> m³</div>
+                    <hr style="border: 0; border-top: 1px dashed #bdc3c7; margin: 8px 0;">
+                    <div>实际吃水深度 (h): <span id="draftVal" style="color:#8e44ad; font-weight:bold; font-size: 18px;">4.00</span> 米</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>💡 核心物理现象观察指南：</strong><br>
+        1. <strong>受力平衡：</strong> 无论你怎么装货，向下的红箭头（重力）和向上的绿箭头（浮力）长度始终保持一致，这就是船能漂浮的根本原因（力学平衡）。<br>
+        2. <strong>排开水的体积（阿基米德原理）：</strong> 船体被水淹没的部分（在半透明水面下呈现深色的船底区域）就是排开水的体积。货物越重，需要排开的水越多，吃水线（Draft）就越深。<br>
+        3. <strong>密度的魔法：</strong> 先将货物装到 100%（此时在淡水中吃水极深，接近吃水线极限）。然后，点击切换到“海洋咸水”。你会发现船奇迹般地**上浮**了一点点！这是因为海水密度大，只需要排开更少体积的水，就能产生同等的巨大浮力。
+    </div>
+
+<script>
+    const canvas = document.getElementById('oceanCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI 元素
+    const cargoSlider = document.getElementById('cargoSlider');
+    const cargoValDisp = document.getElementById('cargoVal');
+    const waterRadios = document.getElementsByName('waterType');
+    
+    // 仪表盘元素
+    const massValDisp = document.getElementById('massVal');
+    const densityValDisp = document.getElementById('densityVal');
+    const volValDisp = document.getElementById('volVal');
+    const draftValDisp = document.getElementById('draftVal');
+
+    // --- 物理常量与参数 ---
+    const BASE_MASS = 4000; // 空船质量 (吨)
+    const MAX_CARGO = 6000; // 最大载货量 (吨)
+    const WATERPLANE_AREA = 1000; // 船体水面截面积 (m²)，为简化计算假设为直壁船体
+    
+    // 状态变量
+    let cargoPercent = 0;
+    let waterDensity = 1.00; // 淡水 1.00, 海水 1.03
+    
+    // 动画平滑变量
+    let targetDraft = 0; // 物理计算出的目标吃水深度 (米)
+    let currentDraft = 0; // 动画当前渲染的吃水深度 (米)
+
+    // 画布坐标与缩放
+    const waterLevelY = 320; // 水面的 Y 坐标 (固定)
+    const pixelsPerMeter = 14; // 1米对应多少像素 (用于视觉放大)
+    const shipHeightMeters = 16; // 船体总高度(米)
+    const shipPixelHeight = shipHeightMeters * pixelsPerMeter;
+    const shipWidth = 340; // 船体像素宽度
+
+    // 交互事件监听
+    cargoSlider.addEventListener('input', (e) => {
+        cargoPercent = parseInt(e.target.value);
+        cargoValDisp.textContent = cargoPercent;
+    });
+
+    waterRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if(e.target.value === 'fresh') waterDensity = 1.00;
+            else waterDensity = 1.03;
+        });
+    });
+
+    // --- 核心物理计算逻辑 ---
+    function updatePhysics() {
+        // 1. 计算总质量 (重力)
+        const totalMass = BASE_MASS + (cargoPercent / 100) * MAX_CARGO;
+        
+        // 2. 根据阿基米德原理计算需要的排开体积: V = m / ρ
+        const displacedVolume = totalMass / waterDensity;
+        
+        // 3. 计算吃水深度: h = V / Area
+        targetDraft = displacedVolume / WATERPLANE_AREA;
+
+        // 4. 动画平滑过渡 (让船慢慢沉降或浮起)
+        currentDraft += (targetDraft - currentDraft) * 0.08;
+
+        // 更新仪表盘显示
+        massValDisp.textContent = totalMass.toFixed(0);
+        densityValDisp.textContent = waterDensity.toFixed(2);
+        volValDisp.textContent = displacedVolume.toFixed(1);
+        draftValDisp.textContent = currentDraft.toFixed(2);
+        
+        return totalMass; // 返回给绘图函数画箭头用
+    }
+
+    // --- 绘图逻辑 ---
+    function draw(totalMass) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. 画背景天空 (简单渐变)
+        let skyGrad = ctx.createLinearGradient(0, 0, 0, waterLevelY);
+        skyGrad.addColorStop(0, "#87CEEB");
+        skyGrad.addColorStop(1, "#E0F6FF");
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, canvas.width, waterLevelY);
+
+        const cx = canvas.width / 2;
+        // 计算船底的 Y 坐标：水面位置 + 吃水深度转换为像素
+        // 引入一点微小的海浪摇晃感 (Bobbing effect)
+        const bobbing = Math.sin(Date.now() / 400) * 3; 
+        const shipBottomY = waterLevelY + (currentDraft * pixelsPerMeter) + bobbing;
+        const shipTopY = shipBottomY - shipPixelHeight;
+
+        // 2. 画货轮主体 (梯形截面)
+        ctx.beginPath();
+        ctx.fillStyle = "#34495e"; // 深灰蓝色船体
+        // 左上，右上，右下，左下
+        ctx.moveTo(cx - shipWidth/2, shipTopY);
+        ctx.lineTo(cx + shipWidth/2, shipTopY);
+        ctx.lineTo(cx + shipWidth/2 - 30, shipBottomY);
+        ctx.lineTo(cx - shipWidth/2 + 30, shipBottomY);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#2c3e50";
+        ctx.stroke();
+
+        // 画甲板上的船桥 (舰岛)
+        ctx.fillStyle = "#ecf0f1";
+        ctx.fillRect(cx + 60, shipTopY - 50, 60, 50);
+        ctx.strokeRect(cx + 60, shipTopY - 50, 60, 50);
+        // 画烟囱
+        ctx.fillStyle = "#e74c3c";
+        ctx.fillRect(cx + 80, shipTopY - 80, 20, 30);
+
+        // 3. 动态绘制货物 (集装箱)
+        const cargoBoxSize = 25;
+        const maxCols = 8;
+        const maxRows = 3;
+        const totalMaxBoxes = maxCols * maxRows; // 24 个箱子代表 100%
+        const currentBoxes = Math.floor((cargoPercent / 100) * totalMaxBoxes);
+        
+        ctx.fillStyle = "#e67e22"; // 橙色集装箱
+        ctx.strokeStyle = "#d35400";
+        let boxesDrawn = 0;
+        const startX = cx - shipWidth/2 + 10;
+        
+        for (let row = 0; row < maxRows; row++) {
+            for (let col = 0; col < maxCols; col++) {
+                if (boxesDrawn >= currentBoxes) break;
+                let boxX = startX + col * (cargoBoxSize + 2);
+                let boxY = shipTopY - (row + 1) * cargoBoxSize;
+                ctx.fillRect(boxX, boxY, cargoBoxSize, cargoBoxSize);
+                ctx.strokeRect(boxX, boxY, cargoBoxSize, cargoBoxSize);
+                boxesDrawn++;
+            }
+        }
+
+        // 4. 画海平面和水下的部分 (半透明覆盖层，实现“淹没”效果)
+        ctx.fillStyle = "rgba(41, 128, 185, 0.7)"; // 半透明海水蓝
+        ctx.fillRect(0, waterLevelY, canvas.width, canvas.height - waterLevelY);
+        
+        // 画一条波浪线水面点缀
+        ctx.beginPath();
+        ctx.moveTo(0, waterLevelY);
+        ctx.lineTo(canvas.width, waterLevelY);
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 5. 绘制力学向量箭头 (精华部分)
+        // 箭头长度随质量动态变化，加一个基础长度保证清晰
+        const arrowLength = 40 + (totalMass / 1000) * 10; 
+        
+        // 重力箭头 (作用于重心 CM，大约在甲板附近)
+        const cmY = shipBottomY - shipPixelHeight * 0.6;
+        drawArrow(ctx, cx - 40, cmY, cx - 40, cmY + arrowLength, "#e74c3c", "G 重力");
+
+        // 浮力箭头 (作用于浮心 CB，即水下体积的几何中心)
+        const cbY = waterLevelY + (currentDraft * pixelsPerMeter) / 2;
+        drawArrow(ctx, cx + 40, cbY, cx + 40, cbY - arrowLength, "#2ecc71", "F 浮力");
+    }
+
+    // 辅助函数：绘制带箭头的线段
+    function drawArrow(ctx, fromx, fromy, tox, toy, color, label) {
+        const headlen = 12; // 箭头头部长度
+        const dx = tox - fromx;
+        const dy = toy - fromy;
+        const angle = Math.atan2(dy, dx);
+        
+        ctx.beginPath();
+        ctx.moveTo(fromx, fromy);
+        ctx.lineTo(tox, toy);
+        // 画箭头左侧
+        ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(tox, toy);
+        // 画箭头右侧
+        ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+        
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // 绘制标签文本
+        ctx.fillStyle = color;
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "center";
+        // 调整文本位置，避免与箭头重叠
+        let textY = dy > 0 ? fromy - 10 : fromy + 20; 
+        ctx.fillText(label, fromx, textY);
+    }
+
+    // --- 主循环 ---
+    function animate() {
+        const currentMass = updatePhysics();
+        draw(currentMass);
+        requestAnimationFrame(animate);
+    }
+
+    // 启动初始化和动画
+    updatePhysics();
+    animate();
+</script>
+
+</body>
+</html>
