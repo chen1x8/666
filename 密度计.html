@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>密度計（比重計）物理原理模擬器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f6f9;
+            margin: 20px;
+            color: #2c3e50;
+        }
+        h1 { margin-bottom: 5px; color: #1a252f; }
+        .subtitle { color: #7f8c8d; margin-bottom: 20px; font-size: 15px; }
+        
+        .container {
+            display: flex;
+            gap: 25px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+        }
+        
+        canvas {
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.04), 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        .controls {
+            width: 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            padding: 18px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #34495e;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #3498db;
+            height: 6px;
+        }
+        
+        .presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+        }
+        
+        button {
+            background-color: #fff;
+            border: 1px solid #bdc3c7;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #34495e;
+        }
+        
+        button:hover { background-color: #ecf0f1; border-color: #95a5a6; }
+        button.active { background-color: #3498db; color: white; border-color: #3498db; }
+
+        .dashboard {
+            margin-top: 5px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 15px;
+            color: #2c3e50;
+            line-height: 1.8;
+            background: #eef2f5;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #e74c3c;
+        }
+        
+        .val-highlight { color: #e74c3c; font-weight: bold; font-size: 18px; }
+        .val-blue { color: #2980b9; font-weight: bold; }
+        
+        #info {
+            max-width: 900px;
+            margin-top: 25px;
+            color: #555;
+            line-height: 1.7;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+            font-size: 15px;
+        }
+        .math-text { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>密度計（比重計）物理原理模擬器</h1>
+    <div class="subtitle">觀察物體在不同密度液體中的排開體積與吃水深度變化</div>
+
+    <div class="container">
+        <!-- 左側：物理視覺化畫布 -->
+        <canvas id="simCanvas" width="350" height="550"></canvas>
+        
+        <!-- 右側：控制台與儀表板 -->
+        <div class="controls">
+            <div class="control-panel">
+                <label for="densitySlider">
+                    <span>🧪 液體密度 (<span class="math-text">ρ</span>):</span>
+                    <span id="densityVal" class="val-highlight">1.00</span> g/cm³
+                </label>
+                <input type="range" id="densitySlider" min="0.8" max="1.5" value="1.0" step="0.01">
+                
+                <div class="presets">
+                    <button class="preset-btn" data-val="0.8" style="border-color:#f1c40f;">酒精/食用油 (0.8)</button>
+                    <button class="preset-btn active" data-val="1.0" style="border-color:#3498db;">純水 (1.0)</button>
+                    <button class="preset-btn" data-val="1.03" style="border-color:#1abc9c;">海水 (1.03)</button>
+                    <button class="preset-btn" data-val="1.26" style="border-color:#2ecc71;">甘油 (1.26)</button>
+                    <button class="preset-btn" data-val="1.45" style="border-color:#e67e22;">濃糖漿 (1.45)</button>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <label>📊 密度計即時受力數據</label>
+                <div class="dashboard">
+                    <div>密度計重量 (G): <span class="val-blue">固定的</span></div>
+                    <div>所需浮力 (Fb): <span class="val-blue">固定的</span> (以支撐重量)</div>
+                    <hr style="border: 0; border-top: 1px dashed #bdc3c7; margin: 10px 0;">
+                    <div>排開液體體積 (V): <span id="volVal" style="color:#8e44ad; font-weight:bold;">100.0</span> %</div>
+                    <div style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">* V = 總重量 / 液體密度 ρ</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>💡 核心物理現象觀察指南：</strong><br>
+        1. <strong>下沉與上浮：</strong> 當你將滑桿向左拉（降低液體密度，如酒精），密度計會**下沉**，因為它需要排開更多體積的液體才能獲得足夠的浮力。向右拉（高密度糖漿）則會**上浮**。<br>
+        2. <strong>非線性刻度：</strong> 仔細觀察密度計細管上的刻度線。你會發現 **0.8 到 0.9 之間的距離**，明顯大於 **1.4 到 1.5 之間的距離**。這是因為體積與密度是倒數關係 ($V \propto 1/\rho$)，這個模擬器完美還原了真實儀器上的非線性物理刻度！<br>
+        3. <strong>配重鉛丸：</strong> 密度計底部有黑色的配重（通常是鉛丸），它的作用是降低整體重心，確保密度計能在液體中直立漂浮而不會翻倒（穩性）。
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI 元素
+    const densitySlider = document.getElementById('densitySlider');
+    const densityValDisp = document.getElementById('densityVal');
+    const volValDisp = document.getElementById('volVal');
+    const presetBtns = document.querySelectorAll('.preset-btn');
+
+    // --- 物理常數與畫布映射 ---
+    const waterLevelY = 200; // 液面固定的 Y 座標
+    const stemLength = 250; // 測量管 (細管) 的像素長度
+    const minDensity = 0.8;
+    const maxDensity = 1.5;
+    
+    // 狀態變數
+    let currentDensity = 1.0;
+    
+    // 動畫平滑變數
+    let targetSubmergedStem = 0; // 目標沒入水中的細管長度
+    let currentSubmergedStem = 0; // 目前動畫渲染的長度
+
+    // --- 輔助函數：物理非線性映射 ---
+    // 根據密度計算細管沒入水中的長度 (h ∝ 1/ρ)
+    function calcSubmergedLength(rho) {
+        const invRho = 1 / rho;
+        const invMax = 1 / maxDensity;
+        const invMin = 1 / minDensity;
+        // 將 1/ρ 線性映射到 0 到 stemLength 的範圍
+        // 當 rho = maxDensity (1.5) 時，長度為 0 (水面在細管最下方)
+        // 當 rho = minDensity (0.8) 時，長度為 stemLength (水面在細管最上方)
+        return stemLength * (invRho - invMax) / (invMin - invMax);
+    }
+
+    // --- 輔助函數：液體顏色漸變 ---
+    function getLiquidColor(density) {
+        // 定義關鍵密度的顏色 [R, G, B, Alpha]
+        const colors = [
+            { d: 0.8, c: [241, 196, 15, 0.5] },  // 黃色 (油/酒精)
+            { d: 1.0, c: [52, 152, 219, 0.5] },  // 藍色 (水)
+            { d: 1.2, c: [46, 204, 113, 0.5] },  // 綠色 (鹽水/甘油)
+            { d: 1.5, c: [230, 126, 34, 0.6] }   // 橙色 (糖漿)
+        ];
+        
+        let c1 = colors[0], c2 = colors[colors.length - 1];
+        for (let i = 0; i < colors.length - 1; i++) {
+            if (density >= colors[i].d && density <= colors[i+1].d) {
+                c1 = colors[i];
+                c2 = colors[i+1];
+                break;
+            }
+        }
+        
+        const ratio = (density - c1.d) / (c2.d - c1.d) || 0;
+        const r = Math.round(c1.c[0] + (c2.c[0] - c1.c[0]) * ratio);
+        const g = Math.round(c1.c[1] + (c2.c[1] - c1.c[1]) * ratio);
+        const b = Math.round(c1.c[2] + (c2.c[2] - c1.c[2]) * ratio);
+        const a = c1.c[3] + (c2.c[3] - c1.c[3]) * ratio;
+        
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
+    }
+
+    // --- 交互事件 ---
+    densitySlider.addEventListener('input', (e) => {
+        setDensity(parseFloat(e.target.value));
+        updateButtons();
+    });
+
+    presetBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const val = parseFloat(e.target.getAttribute('data-val'));
+            densitySlider.value = val;
+            setDensity(val);
+            updateButtons(e.target);
+        });
+    });
+
+    function setDensity(val) {
+        currentDensity = val;
+        densityValDisp.textContent = currentDensity.toFixed(2);
+        
+        // 排開體積百分比 (以純水 ρ=1.0 為 100%)
+        const volumePercent = (1.0 / currentDensity) * 100;
+        volValDisp.textContent = volumePercent.toFixed(1);
+    }
+
+    function updateButtons(activeBtn = null) {
+        presetBtns.forEach(b => b.classList.remove('active'));
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        } else {
+            // 如果滑桿數值剛好等於某個按鈕，則點亮它
+            presetBtns.forEach(b => {
+                if (parseFloat(b.getAttribute('data-val')) === currentDensity) {
+                    b.classList.add('active');
+                }
+            });
+        }
+    }
+
+    // --- 繪圖邏輯 ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const cx = canvas.width / 2;
+
+        // 1. 計算目標位置並平滑過渡
+        targetSubmergedStem = calcSubmergedLength(currentDensity);
+        // 加入輕微的阻尼動畫效果
+        currentSubmergedStem += (targetSubmergedStem - currentSubmergedStem) * 0.1;
+        
+        // 加上微小的上下浮動 (模擬水波)
+        const bobbing = Math.sin(Date.now() / 500) * 2;
+        
+        // 細管底部的 Y 座標 (水面座標 + 沒入水中的長度)
+        const stemBottomY = waterLevelY + currentSubmergedStem + bobbing;
+        const stemTopY = stemBottomY - stemLength;
+
+        // --- 開始繪製背景與量筒 (後壁) ---
+        ctx.fillStyle = "#fafafa";
+        ctx.fillRect(cx - 70, 50, 140, 480);
+        ctx.strokeStyle = "#ddd";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx - 70, 50, 140, 480);
+
+        // --- 繪製密度計 ---
+        ctx.save();
+        
+        // a. 細管 (Stem)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.strokeStyle = "#555";
+        ctx.lineWidth = 1.5;
+        const stemWidth = 14;
+        ctx.fillRect(cx - stemWidth/2, stemTopY, stemWidth, stemLength);
+        ctx.strokeRect(cx - stemWidth/2, stemTopY, stemWidth, stemLength);
+        
+        // b. 繪製非線性刻度與文字
+        ctx.fillStyle = "#333";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.font = "10px Arial";
+        
+        // 迴圈繪製 0.8 到 1.5 的刻度
+        for (let d = minDensity; d <= maxDensity; d += 0.05) {
+            // 使用完全相同的物理公式來定位刻度
+            const markSubmerged = calcSubmergedLength(d);
+            const markY = stemBottomY - markSubmerged;
+            
+            ctx.beginPath();
+            ctx.moveTo(cx - stemWidth/2, markY);
+            
+            // 主刻度 (0.1為單位) 長一點，副刻度 (0.05為單位) 短一點
+            if (Math.abs((d * 100) % 10) < 1) { // 浮點數精度處理
+                ctx.lineTo(cx + stemWidth/2, markY); // 橫跨整個管子
+                ctx.fillText(d.toFixed(1), cx + stemWidth/2 + 4, markY); // 數字標籤
+            } else {
+                ctx.lineTo(cx, markY); // 只有一半長
+            }
+            ctx.stroke();
+        }
+
+        // c. 氣室與配重區 (Bulb)
+        const bulbStartY = stemBottomY;
+        const bulbHeight = 80;
+        const bulbWidth = 36;
+        
+        ctx.beginPath();
+        // 繪製流線型的底部
+        ctx.moveTo(cx - stemWidth/2, bulbStartY);
+        ctx.bezierCurveTo(cx - bulbWidth/2, bulbStartY + 10, cx - bulbWidth/2, bulbStartY + bulbHeight - 20, cx, bulbStartY + bulbHeight);
+        ctx.bezierCurveTo(cx + bulbWidth/2, bulbStartY + bulbHeight - 20, cx + bulbWidth/2, bulbStartY + 10, cx + stemWidth/2, bulbStartY);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.fill();
+        ctx.stroke();
+
+        // d. 鉛丸配重 (Weights)
+        ctx.beginPath();
+        ctx.moveTo(cx - 14, bulbStartY + bulbHeight - 15);
+        ctx.bezierCurveTo(cx - 10, bulbStartY + bulbHeight, cx + 10, bulbStartY + bulbHeight, cx + 14, bulbStartY + bulbHeight - 15);
+        ctx.fillStyle = "#2c3e50"; // 深灰色代表鉛丸
+        ctx.fill();
+        
+        // 畫幾顆散落的鉛丸小點
+        ctx.fillStyle = "#1a252f";
+        for(let i=0; i<15; i++) {
+            const rx = cx + (Math.random() - 0.5) * 20;
+            const ry = bulbStartY + bulbHeight - 25 + Math.random() * 15;
+            // 確保在圓弧內 (簡單近似)
+            if(Math.pow(rx-cx, 2) + Math.pow(ry-(bulbStartY+bulbHeight-15), 2) < 150) {
+                ctx.beginPath();
+                ctx.arc(rx, ry, 1.5, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+
+        ctx.restore();
+
+        // --- 繪製液體 (覆蓋在密度計上方，半透明) ---
+        ctx.fillStyle = getLiquidColor(currentDensity);
+        // 液體區域從 waterLevelY 到量筒底部
+        ctx.fillRect(cx - 70, waterLevelY, 140, 530 - waterLevelY);
+        
+        // 畫水面線
+        ctx.beginPath();
+        ctx.moveTo(cx - 70, waterLevelY);
+        ctx.lineTo(cx + 70, waterLevelY);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // --- 繪製量筒 (前壁光澤效果) ---
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 65, 55);
+        ctx.lineTo(cx - 65, 525);
+        ctx.stroke();
+
+        // 畫一個放大鏡效果框在水面處 (選用，增加細節)
+        ctx.strokeStyle = "rgba(231, 76, 60, 0.6)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(cx - 20, waterLevelY - 10, 50, 20);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(231, 76, 60, 0.8)";
+        ctx.font = "12px Arial";
+        ctx.fillText("讀數線", cx + 35, waterLevelY + 4);
+
+        requestAnimationFrame(draw);
+    }
+
+    // 初始化設定並啟動動畫
+    setDensity(1.0);
+    draw();
+
+</script>
+
+</body>
+</html>
