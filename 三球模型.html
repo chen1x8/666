@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>经典三球浮沉物理模型</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f6f9;
+            margin: 20px;
+            color: #2c3e50;
+        }
+        h1 { margin-bottom: 5px; color: #1a252f; }
+        .subtitle { color: #7f8c8d; margin-bottom: 20px; font-size: 15px; }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        canvas {
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.04), 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        .controls {
+            width: 380px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            padding: 18px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #fff;
+            border: 2px solid #bdc3c7;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+
+        .radio-label:hover {
+            border-color: #3498db;
+            background: #f0f8ff;
+        }
+
+        input[type="radio"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+            accent-color: #3498db;
+        }
+
+        input[type="radio"]:checked + span {
+            color: #2980b9;
+        }
+        
+        .radio-label.active {
+            border-color: #3498db;
+            background: #eaf2f8;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid #bdc3c7;
+            padding: 8px;
+        }
+
+        .data-table th {
+            background-color: #ecf0f1;
+            color: #34495e;
+        }
+
+        .col-float { background-color: #fff3e0; }
+        .col-suspend { background-color: #e8f5e9; }
+        .col-sink { background-color: #ffebee; }
+
+        #info {
+            max-width: 1000px;
+            margin-top: 25px;
+            color: #555;
+            line-height: 1.7;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>经典物理：三球浮沉模型</h1>
+    <div class="subtitle">探索物体密度、液体密度与物体浮沉状态的关系</div>
+
+    <div class="container">
+        <!-- 左侧：物理视觉化画布 -->
+        <canvas id="simCanvas" width="550" height="400"></canvas>
+        
+        <!-- 右侧：控制台与数据表 -->
+        <div class="controls">
+            <div class="control-panel">
+                <div style="font-weight: 600; color: #34495e; margin-bottom: 12px;">🧪 选择实验场景：</div>
+                <div class="radio-group" id="modeSelector">
+                    <label class="radio-label active">
+                        <input type="radio" name="simMode" value="eqVol" checked>
+                        <span>场景 A：同液体 ＋ 等体积小球</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="simMode" value="eqMass">
+                        <span>场景 B：同液体 ＋ 等质量小球</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="simMode" value="diffLiq">
+                        <span>场景 C：不同液体 ＋ 一模一样的小球</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="control-panel" style="padding: 12px;">
+                <div style="font-weight: 600; color: #34495e; margin-bottom: 5px;">📊 实时物理数据</div>
+                <table class="data-table">
+                    <tr>
+                        <th>参数 \ 状态</th>
+                        <th class="col-float">漂浮 (左)</th>
+                        <th class="col-suspend">悬浮 (中)</th>
+                        <th class="col-sink">沉底 (右)</th>
+                    </tr>
+                    <tr>
+                        <td>液体密度 ρ液</td>
+                        <td id="d-l1" class="col-float">-</td>
+                        <td id="d-l2" class="col-suspend">-</td>
+                        <td id="d-l3" class="col-sink">-</td>
+                    </tr>
+                    <tr>
+                        <td>小球密度 ρ球</td>
+                        <td id="d-b1" class="col-float">-</td>
+                        <td id="d-b2" class="col-suspend">-</td>
+                        <td id="d-b3" class="col-sink">-</td>
+                    </tr>
+                    <tr>
+                        <td>小球质量 m</td>
+                        <td id="d-m1" class="col-float">-</td>
+                        <td id="d-m2" class="col-suspend">-</td>
+                        <td id="d-m3" class="col-sink">-</td>
+                    </tr>
+                    <tr>
+                        <td>小球体积 V</td>
+                        <td id="d-v1" class="col-float">-</td>
+                        <td id="d-v2" class="col-suspend">-</td>
+                        <td id="d-v3" class="col-sink">-</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>💡 实验现象解析：</strong><br>
+        1. <strong>场景 A (等体积)：</strong> 三个球大小一样。漂浮的球（如木球）质量最轻，密度最小；沉底的球（如铁球）质量最重，密度最大。<br>
+        2. <strong>场景 B (等质量)：</strong> 三个球重量一样。漂浮的球必然**体积最大**（因为它需要排开更多水来获得与自身重力相等的浮力，且密度小导致它很“蓬松”）；沉底的球**体积最小**（密度很大，实心）。<br>
+        3. <strong>场景 C (不同液体)：</strong> 三个球**完全相同**（颜色、质量、体积都一样）。它在油（左侧，密度 0.8）中沉底，在水（中间，密度 1.0）中悬浮，在浓盐水（右侧，密度 1.2）中漂浮。这说明：**同一个物体在不同液体中的浮沉，取决于液体的密度**。
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI 元素
+    const radios = document.querySelectorAll('input[name="simMode"]');
+    const labels = document.querySelectorAll('.radio-label');
+
+    // 物理环境常数
+    const WATER_LEVEL = 150;
+    const TANK_BOTTOM = 350;
+    const BASE_RADIUS = 30; // 基准半径
+
+    // 定义 3 个水槽和 3 个小球的状态对象
+    let tanks = [
+        { x: 100, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" },
+        { x: 275, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" },
+        { x: 450, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" }
+    ];
+
+    let balls = [
+        { x: 100, y: 0, r: 0, targetY: 0, targetR: 0, density: 0.5, mass: 50, vol: 100, color: "#d35400", type: "木块" }, // 漂浮
+        { x: 275, y: 0, r: 0, targetY: 0, targetR: 0, density: 1.0, mass: 100, vol: 100, color: "#ecf0f1", type: "塑料" },// 悬浮
+        { x: 450, y: 0, r: 0, targetY: 0, targetR: 0, density: 2.0, mass: 200, vol: 100, color: "#7f8c8d", type: "铁块" } // 沉底
+    ];
+
+    // 初始化小球位置
+    balls.forEach(b => { b.y = 50; b.r = BASE_RADIUS; });
+
+    // --- 核心逻辑：设置不同模式的目标参数 ---
+    function setMode(mode) {
+        if (mode === 'eqVol') {
+            // 场景 A：同液体，等体积
+            // 液体全部是水 (1.0)
+            tanks[0] = { x: 100, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+            tanks[1] = { x: 275, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+            tanks[2] = { x: 450, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+
+            // 小球体积全为 100 (R恒定)，密度不同，质量不同
+            balls[0] = { ...balls[0], targetR: BASE_RADIUS, density: 0.5, mass: "m", vol: "V", color: "#d35400" }; // 木色
+            balls[0].targetY = WATER_LEVEL; // 漂浮 (浮于水面)
+            
+            balls[1] = { ...balls[1], targetR: BASE_RADIUS, density: 1.0, mass: "2m", vol: "V", color: "#ecf0f1" }; // 白色
+            balls[1].targetY = (WATER_LEVEL + TANK_BOTTOM) / 2; // 悬浮 (正中间)
+            
+            balls[2] = { ...balls[2], targetR: BASE_RADIUS, density: 2.0, mass: "4m", vol: "V", color: "#7f8c8d" }; // 深灰色
+            balls[2].targetY = TANK_BOTTOM - BASE_RADIUS; // 沉底
+        } 
+        else if (mode === 'eqMass') {
+            // 场景 B：同液体，等质量
+            tanks[0] = { x: 100, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+            tanks[1] = { x: 275, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+            tanks[2] = { x: 450, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+
+            // 质量全部恒定，密度不同，所以体积 (半径) 必须改变！
+            // V = m / ρ.  如果 B2 是基准 (V, R=30)
+            // B1 密度一半，体积是 2 倍。半径比例是 2^(1/3) ≈ 1.26
+            balls[0] = { ...balls[0], targetR: BASE_RADIUS * 1.26, density: 0.5, mass: "2m", vol: "2V", color: "#d35400" }; 
+            balls[0].targetY = WATER_LEVEL - 5; // 变大了，稍微往上飘一点
+            
+            balls[1] = { ...balls[1], targetR: BASE_RADIUS, density: 1.0, mass: "2m", vol: "V", color: "#ecf0f1" }; 
+            balls[1].targetY = (WATER_LEVEL + TANK_BOTTOM) / 2;
+            
+            // B3 密度是 2 倍，体积是 0.5 倍。半径比例是 0.5^(1/3) ≈ 0.79
+            balls[2] = { ...balls[2], targetR: BASE_RADIUS * 0.79, density: 2.0, mass: "2m", vol: "0.5V", color: "#7f8c8d" };
+            balls[2].targetY = TANK_BOTTOM - (BASE_RADIUS * 0.79);
+        }
+        else if (mode === 'diffLiq') {
+            // 场景 C：不同液体，同小球
+            // 液体 1：油 (0.8)，液体 2：水 (1.0)，液体 3：盐水 (1.2)
+            tanks[0] = { x: 100, liqDensity: 0.8, color: "rgba(241, 196, 15, 0.5)", name: "油" };
+            tanks[1] = { x: 275, liqDensity: 1.0, color: "rgba(52, 152, 219, 0.5)", name: "水" };
+            tanks[2] = { x: 450, liqDensity: 1.2, color: "rgba(46, 204, 113, 0.5)", name: "盐水" };
+
+            // 小球完全一样：统一密度 1.0，统一颜色红色
+            const identicalColor = "#e74c3c";
+            
+            // B1: ρ球=1.0 > ρ液=0.8 -> 沉底
+            balls[0] = { ...balls[0], targetR: BASE_RADIUS, density: 1.0, mass: "m", vol: "V", color: identicalColor }; 
+            balls[0].targetY = TANK_BOTTOM - BASE_RADIUS; 
+            
+            // B2: ρ球=1.0 = ρ液=1.0 -> 悬浮
+            balls[1] = { ...balls[1], targetR: BASE_RADIUS, density: 1.0, mass: "m", vol: "V", color: identicalColor }; 
+            balls[1].targetY = (WATER_LEVEL + TANK_BOTTOM) / 2;
+            
+            // B3: ρ球=1.0 < ρ液=1.2 -> 漂浮 (没入体积比例 1.0/1.2 ≈ 83%)
+            balls[2] = { ...balls[2], targetR: BASE_RADIUS, density: 1.0, mass: "m", vol: "V", color: identicalColor };
+            balls[2].targetY = WATER_LEVEL + BASE_RADIUS * 0.6; // 大部分没入水中
+        }
+        
+        updateTable(mode);
+    }
+
+    // --- 更新数据表 ---
+    function updateTable() {
+        for(let i=0; i<3; i++) {
+            document.getElementById(`d-l${i+1}`).innerHTML = `${tanks[i].liqDensity.toFixed(1)} <span style="color:#7f8c8d;font-size:10px;">(${tanks[i].name})</span>`;
+            document.getElementById(`d-b${i+1}`).textContent = balls[i].density.toFixed(1);
+            document.getElementById(`d-m${i+1}`).textContent = balls[i].mass;
+            document.getElementById(`d-v${i+1}`).textContent = balls[i].vol;
+        }
+    }
+
+    // --- 事件监听 ---
+    radios.forEach((radio, index) => {
+        radio.addEventListener('change', (e) => {
+            labels.forEach(l => l.classList.remove('active'));
+            labels[index].classList.add('active');
+            setMode(e.target.value);
+        });
+    });
+
+    // --- 绘图与动画循环 ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 微小的波浪与悬浮摇摆效果
+        const time = Date.now() / 300;
+        
+        for(let i = 0; i < 3; i++) {
+            const tank = tanks[i];
+            const ball = balls[i];
+
+            // 1. 动画平滑过渡 (位置和半径)
+            ball.y += (ball.targetY - ball.y) * 0.08;
+            ball.r += (ball.targetR - ball.r) * 0.1;
+
+            // 2. 绘制水槽后壁和液体
+            const tankWidth = 110;
+            const tx = tank.x - tankWidth/2;
+            
+            // 液体
+            ctx.fillStyle = tank.color;
+            ctx.fillRect(tx, WATER_LEVEL, tankWidth, TANK_BOTTOM - WATER_LEVEL);
+            
+            // 水面线
+            ctx.beginPath();
+            ctx.moveTo(tx, WATER_LEVEL);
+            ctx.lineTo(tx + tankWidth, WATER_LEVEL);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // 3. 绘制小球
+            // 计算摇晃 (仅漂浮和悬浮状态有轻微摇晃)
+            let bobY = 0;
+            if (ball.targetY < TANK_BOTTOM - ball.r - 2) {
+                bobY = Math.sin(time + i) * 2; // 随机相位波动
+            }
+
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y + bobY, ball.r, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "rgba(0,0,0,0.5)";
+            ctx.stroke();
+
+            // 球面高光，增加立体感
+            ctx.beginPath();
+            ctx.arc(ball.x - ball.r*0.3, ball.y + bobY - ball.r*0.3, ball.r*0.2, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255,255,255,0.4)";
+            ctx.fill();
+
+            // 4. 绘制水槽前壁和边框
+            ctx.strokeStyle = "#bdc3c7";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(tx, WATER_LEVEL - 30);
+            ctx.lineTo(tx, TANK_BOTTOM);
+            ctx.lineTo(tx + tankWidth, TANK_BOTTOM);
+            ctx.lineTo(tx + tankWidth, WATER_LEVEL - 30);
+            ctx.stroke();
+
+            // 5. 底部标签
+            ctx.fillStyle = "#34495e";
+            ctx.font = "bold 14px Arial";
+            ctx.textAlign = "center";
+            let stateText = i === 0 ? "漂浮" : (i === 1 ? "悬浮" : "沉底");
+            ctx.fillText(stateText, ball.x, TANK_BOTTOM + 30);
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    // 初始化运行
+    setMode('eqVol');
+    draw();
+
+</script>
+
+</body>
+</html>
