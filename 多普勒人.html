@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>声波多普勒效应演示器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        #canvasContainer {
+            position: relative;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        canvas {
+            border: 1px solid #ccc;
+            background-color: #fff;
+            display: block;
+        }
+
+        #controls {
+            width: 800px;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-around;
+            gap: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 45%;
+        }
+
+        label {
+            font-weight: bold;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .m-value {
+            font-weight: normal;
+            color: #777;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #infoText {
+            margin-top: 20px;
+            width: 800px;
+            text-align: center;
+            color: #666;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>声波多普勒效应模拟器</h1>
+
+    <div id="canvasContainer">
+        <canvas id="dopplerCanvas" width="800" height="400"></canvas>
+    </div>
+
+    <div id="controls">
+        <div class="control-group">
+            <label>
+                声源速度 ($v_s$):
+                <span class="m-value" id="sourceSpeedVal">50</span> m/s
+            </label>
+            <input type="range" id="sourceSpeedSlider" min="-100" max="100" value="50" step="1">
+        </div>
+
+        <div class="control-group">
+            <label>
+                声音速度 ($v_w$):
+                <span class="m-value" id="soundSpeedVal">340</span> m/s
+            </label>
+            <input type="range" id="soundSpeedSlider" min="10" max="500" value="340" step="10">
+        </div>
+    </div>
+    
+    <button id="resetBtn">重置演示</button>
+
+    <div id="infoText">
+        多普勒效应演示：一个红色声源在水平移动。声源在移动过程中，声源前方和后方的波峰间距（波长）会发生变化。在声源前方，波峰被“挤压”，导致波长变短，波的频率变高（音调变高）；在声源后方，波峰被“拉开”，波长变长，频率变低（音调变低）。
+    }
+    </div>
+
+<script>
+    const canvas = document.getElementById('dopplerCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let sourceSpeedSlider = document.getElementById('sourceSpeedSlider');
+    let soundSpeedSlider = document.getElementById('soundSpeedSlider');
+    let sourceSpeedReadout = document.getElementById('sourceSpeedVal');
+    let soundSpeedReadout = document.getElementById('soundSpeedVal');
+    let resetBtn = document.getElementById('resetBtn');
+    
+    let sourceSpeed = parseFloat(sourceSpeedSlider.value);
+    let soundSpeed = parseFloat(soundSpeedSlider.value);
+    
+    // 动画状态
+    let waves = [];
+    const maxWaves = 25;
+    const waveInterval = 20; // 帧，控制发射频率 (频率 f0 的一种控制方法)
+    let frameCount = 0;
+    
+    // 声源
+    const source = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      r: 10,
+    };
+    
+    function addWave(x, y) {
+      waves.push({
+        x: x,
+        y: y,
+        r: 0,
+        age: 0,
+        alpha: 1.0,
+      });
+      if (waves.length > maxWaves) {
+        waves.shift();
+      }
+    }
+    
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+      // 更新声源位置
+      source.x += sourceSpeed / 10;
+      if (source.x > canvas.width + 20) source.x = -20;
+      if (source.x < -20) source.x = canvas.width + 20;
+    
+      // 发射新波圈
+      frameCount++;
+      if (frameCount >= waveInterval) {
+        addWave(source.x, source.y);
+        frameCount = 0;
+      }
+    
+      // 绘制场景辅助线
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height / 2 + 15);
+      ctx.lineTo(canvas.width, canvas.height / 2 + 15);
+      ctx.strokeStyle = '#999';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    
+      // 绘制声源
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, source.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#e44';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    
+      // 绘制并更新所有波圈
+      for (let i = waves.length - 1; i >= 0; i--) {
+        waves[i].r += soundSpeed / 10; // 波速决定膨胀速度
+        waves[i].age++;
+        // 波圈逐渐变淡
+        waves[i].alpha = 1 - (waves[i].age / (maxWaves * waveInterval * 0.8));
+    
+        if (waves[i].alpha > 0) {
+            ctx.beginPath();
+            ctx.arc(waves[i].x, waves[i].y, waves[i].r, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(0, 100, 255, ${waves[i].alpha})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            waves.splice(i, 1);
+        }
+      }
+    
+      requestAnimationFrame(update);
+    }
+    
+    // 滑块和按钮事件监听
+    sourceSpeedSlider.oninput = function() {
+      sourceSpeed = parseFloat(this.value);
+      sourceSpeedReadout.innerText = this.value;
+    };
+    soundSpeedSlider.oninput = function() {
+      soundSpeed = parseFloat(this.value);
+      soundSpeedReadout.innerText = this.value;
+    };
+    resetBtn.addEventListener('click', () => {
+        waves = [];
+        frameCount = 0;
+        source.x = canvas.width / 2;
+    });
+    
+    // 启动动画循环
+    update();
+    </script>
+</body>
+</html>
