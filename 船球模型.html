@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>船抛物液面变化物理模型</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f6f9;
+            margin: 20px;
+            color: #2c3e50;
+        }
+        h1 { margin-bottom: 5px; color: #1a252f; }
+        .subtitle { color: #7f8c8d; margin-bottom: 20px; font-size: 15px; }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        canvas {
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.04), 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        .controls {
+            width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            padding: 18px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        button:active { transform: scale(0.96); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #btn-wood { background-color: #e67e22; }
+        #btn-stone { background-color: #7f8c8d; }
+        #btn-fish { background-color: #2ecc71; }
+        #btn-reset { background-color: #3498db; margin-top: 10px; }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid #bdc3c7;
+            padding: 8px 4px;
+        }
+
+        .data-table th {
+            background-color: #ecf0f1;
+            color: #34495e;
+            font-weight: 600;
+        }
+
+        .val-highlight { color: #e74c3c; font-weight: bold; }
+        .val-safe { color: #27ae60; font-weight: bold; }
+        .formula { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: bold; font-size: 14px; }
+
+        #info {
+            max-width: 1000px;
+            margin-top: 25px;
+            color: #555;
+            line-height: 1.7;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+            font-size: 15px;
+        }
+        
+        /* 表格行动亮色 */
+        .active-row { background-color: #fffde7; }
+    </style>
+</head>
+<body>
+
+    <h1>经典物理：船上抛物液面变化模型</h1>
+    <div class="subtitle">通过对比物品在“船上”和在“水中”的排开体积 (V排)，破解液面升降的经典难题</div>
+
+    <div class="container">
+        <!-- 左侧：物理视觉化画布 -->
+        <canvas id="simCanvas" width="550" height="400"></canvas>
+        
+        <!-- 右侧：控制台与数据表 -->
+        <div class="controls">
+            <div class="control-panel">
+                <div style="font-weight: 600; color: #34495e;">🎯 互动操作面板</div>
+                <p style="font-size: 13px; color: #7f8c8d; margin: 8px 0;">点击下方按钮，将船上的对应物品投入水中。观察左侧红色的“初始液面”基准线与当前液面的变化，以及小船吃水深度的改变。</p>
+                <div class="btn-group">
+                    <button id="btn-wood" onclick="throwItem('wood')">扔木头 (漂浮)</button>
+                    <button id="btn-stone" onclick="throwItem('stone')">扔石头 (沉底)</button>
+                    <button id="btn-fish" onclick="throwItem('fish')">扔鱼 (悬浮)</button>
+                </div>
+                <button id="btn-reset" style="width: 100%;" onclick="resetAll()">🔄 全部捞回船上 (重置)</button>
+            </div>
+
+            <div class="control-panel" style="padding: 12px;">
+                <div style="font-weight: 600; color: #34495e; margin-bottom: 5px;">📊 物理原理深度剖析表</div>
+                <table class="data-table" id="logicTable">
+                    <tr>
+                        <th width="15%">物品</th>
+                        <th width="15%">入水状态</th>
+                        <th width="25%">在船上时 <span class="formula">V<sub>排</sub></span></th>
+                        <th width="25%">投入水中后 <span class="formula">V<sub>排</sub>'</span></th>
+                        <th width="20%">引发液面变化</th>
+                    </tr>
+                    <tr id="row-wood">
+                        <td style="color:#e67e22; font-weight:bold;">木头</td>
+                        <td>漂浮</td>
+                        <td>m / <span class="formula">ρ<sub>水</sub></span></td>
+                        <td>m / <span class="formula">ρ<sub>水</sub></span></td>
+                        <td class="val-safe">不变 -</td>
+                    </tr>
+                    <tr id="row-stone">
+                        <td style="color:#7f8c8d; font-weight:bold;">石头</td>
+                        <td>沉底</td>
+                        <td>m / <span class="formula">ρ<sub>水</sub></span></td>
+                        <td><span class="formula">V<sub>石</sub></span> (因 <span class="formula">ρ<sub>石</sub> > ρ<sub>水</sub></span>)<br><span class="val-highlight">变小了！</span></td>
+                        <td class="val-highlight">下降 ↓</td>
+                    </tr>
+                    <tr id="row-fish">
+                        <td style="color:#2ecc71; font-weight:bold;">小鱼</td>
+                        <td>悬浮</td>
+                        <td>m / <span class="formula">ρ<sub>水</sub></span></td>
+                        <td><span class="formula">V<sub>鱼</sub></span> = m / <span class="formula">ρ<sub>水</sub></span></td>
+                        <td class="val-safe">不变 -</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>💡 核心物理逻辑推导（万能法则：对比前后 V排）：</strong><br>
+        只要物品在船上，它作为船的“货物”，根据漂浮条件（浮力=重力），它贡献的排开水体积固定为：<span class="formula">V<sub>排(船)</sub> = m<sub>物</sub> / ρ<sub>水</sub></span>。<br><br>
+        1. <strong>扔木头（漂浮）：</strong> 扔入水中后，木头自身漂浮，浮力依然等于重力，所以 <span class="formula">V<sub>排(水)</sub> = m<sub>木</sub> / ρ<sub>水</sub></span>。前后贡献的排开体积完全相等，液面<strong>不变</strong>。<br>
+        2. <strong>扔鱼（悬浮）：</strong> 鱼的密度等于水，悬浮在水中。它排开自身的体积 <span class="formula">V<sub>鱼</sub></span>。因为 <span class="formula">ρ<sub>鱼</sub> = ρ<sub>水</sub></span>，所以 <span class="formula">V<sub>鱼</sub> = m<sub>鱼</sub> / ρ<sub>水</sub></span>。前后排开体积依然相等，液面<strong>不变</strong>。<br>
+        3. <strong>扔石头（沉底）：</strong> <strong>这就是题眼！</strong> 石头在船上时，由于船是漂浮的，石头借用了船的浮力，排开的水体积为 <span class="formula">m<sub>石</sub> / ρ<sub>水</sub></span>。扔进水里后，石头沉底，浮力小于重力，它只能排开自身体积 <span class="formula">V<sub>石</sub></span>。因为 <span class="formula">ρ<sub>石</sub> > ρ<sub>水</sub></span>，所以自身体积 <span class="formula">V<sub>石</sub> < m<sub>石</sub> / ρ<sub>水</sub></span>。石头入水后排开的水<strong>变少了</strong>，导致整体液面<strong>下降</strong>！
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- 物理常数与环境设定 ---
+    const TANK_BOTTOM = 350;
+    const TANK_LEFT = 50;
+    const TANK_RIGHT = 500;
+    const TANK_AREA = 250; // 影响液面变化的敏感度
+
+    const D_WATER = 1.0;
+
+    // 船与人的基础质量
+    const M_BOAT = 150;
+    const M_PERSON = 50;
+    const BOAT_WIDTH = 120;
+    const BOAT_HEIGHT = 40;
+
+    // 物品数据
+    const items = {
+        wood:  { mass: 40, density: 0.5, color: '#e67e22', name: '木头', boatOffsetX: -30, waterX: 100, state: 'boat', w: 25, h: 25 },
+        stone: { mass: 80, density: 2.0, color: '#7f8c8d', name: '石头', boatOffsetX: 0,   waterX: 420, state: 'boat', r: 12 },
+        fish:  { mass: 50, density: 1.0, color: '#2ecc71', name: '鱼',   boatOffsetX: 30,  waterX: 280, state: 'boat', w: 30, h: 15 }
+    };
+
+    // 计算物品体积 (V = m / ρ)
+    Object.values(items).forEach(item => {
+        item.vol = item.mass / item.density;
+        // 初始化动画坐标
+        item.currentX = TANK_LEFT + 200 + item.boatOffsetX; 
+        item.currentY = 100; // 随便给个初始，后面会立即计算
+    });
+
+    // 计算总初始排开体积 (用于设定初始红色基准线)
+    const initialTotalMass = M_BOAT + M_PERSON + items.wood.mass + items.stone.mass + items.fish.mass;
+    const initialVDisp = initialTotalMass / D_WATER;
+    
+    // Y轴的视觉放大系数，使得水面变化更明显
+    const PX_PER_VOL = 0.5; 
+    
+    // 画布底部 350，如果没有水，Y是350。加上初始排开的水，算出初始液面
+    const INITIAL_WATER_Y = TANK_BOTTOM - (initialVDisp * PX_PER_VOL);
+
+    // 动画状态变量
+    let currentWaterY = INITIAL_WATER_Y;
+    let targetWaterY = INITIAL_WATER_Y;
+    
+    let currentBoatY = 0;
+    let targetBoatY = 0;
+
+    // --- 核心物理计算 ---
+    function updatePhysics() {
+        // 1. 计算船上承载的总质量
+        let boatLoad = M_BOAT + M_PERSON;
+        if (items.wood.state === 'boat') boatLoad += items.wood.mass;
+        if (items.stone.state === 'boat') boatLoad += items.stone.mass;
+        if (items.fish.state === 'boat') boatLoad += items.fish.mass;
+
+        // 2. 船自身需要的排开体积
+        let boatVDisp = boatLoad / D_WATER;
+        let totalVDisp = boatVDisp;
+
+        // 3. 加上水中的物品的排开体积
+        if (items.wood.state === 'water') {
+            // 木头漂浮，浮力=重力
+            totalVDisp += items.wood.mass / D_WATER;
+        }
+        if (items.stone.state === 'water') {
+            // 石头沉底，排开自身体积
+            totalVDisp += items.stone.vol;
+        }
+        if (items.fish.state === 'water') {
+            // 鱼悬浮，排开自身体积 (刚好等于它的质量/水密度)
+            totalVDisp += items.fish.vol;
+        }
+
+        // 4. 计算目标液面高度和船吃水高度
+        targetWaterY = TANK_BOTTOM - (totalVDisp * PX_PER_VOL);
+        
+        // 船的吃水深度與 boatVDisp 成正比
+        let boatDraftPx = boatVDisp * 0.08; // 調整視覺比例
+        // 船底 (targetBoatY + BOAT_HEIGHT) 應該位於水面之下 boatDraftPx 的位置
+        targetBoatY = targetWaterY + boatDraftPx - BOAT_HEIGHT;
+
+        // 更新表格高亮状态
+        updateTableHighlight();
+    }
+
+    // --- 交互控制 ---
+    function throwItem(id) {
+        items[id].state = 'water';
+        document.getElementById('btn-' + id).disabled = true;
+        updatePhysics();
+    }
+
+    function resetAll() {
+        Object.values(items).forEach(item => item.state = 'boat');
+        document.getElementById('btn-wood').disabled = false;
+        document.getElementById('btn-stone').disabled = false;
+        document.getElementById('btn-fish').disabled = false;
+        updatePhysics();
+    }
+
+    function updateTableHighlight() {
+        ['wood', 'stone', 'fish'].forEach(id => {
+            const row = document.getElementById('row-' + id);
+            if (items[id].state === 'water') {
+                row.classList.add('active-row');
+            } else {
+                row.classList.remove('active-row');
+            }
+        });
+    }
+
+    // --- 绘图引擎 ---
+    function drawArrow(ctx, x, startY, endY, color) {
+        if (Math.abs(startY - endY) < 1.5) return;
+        const headlen = 8;
+        const angle = startY > endY ? -Math.PI/2 : Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.lineTo(x - headlen * Math.cos(angle - Math.PI / 6), endY - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(x, endY);
+        ctx.lineTo(x - headlen * Math.cos(angle + Math.PI / 6), endY - headlen * Math.sin(angle + Math.PI / 6));
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 平滑过渡水面和船的位置
+        currentWaterY += (targetWaterY - currentWaterY) * 0.08;
+        currentBoatY += (targetBoatY - currentBoatY) * 0.08;
+
+        const boatCenterX = (TANK_LEFT + TANK_RIGHT) / 2;
+        
+        // 计算统一的 dh 变量供后续复用，避免重复声明
+        const dh = currentWaterY - INITIAL_WATER_Y;
+
+        // 1. 画水槽里面的水
+        ctx.fillStyle = "rgba(52, 152, 219, 0.35)";
+        ctx.fillRect(TANK_LEFT, currentWaterY, TANK_RIGHT - TANK_LEFT, TANK_BOTTOM - currentWaterY);
+        
+        // 动态水面线
+        ctx.beginPath();
+        ctx.moveTo(TANK_LEFT, currentWaterY);
+        ctx.lineTo(TANK_RIGHT, currentWaterY);
+        ctx.strokeStyle = "rgba(41, 128, 185, 0.8)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // 2. 画红色的初始基准线
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.moveTo(TANK_LEFT - 15, INITIAL_WATER_Y);
+        ctx.lineTo(TANK_RIGHT + 15, INITIAL_WATER_Y);
+        ctx.strokeStyle = "rgba(231, 76, 60, 0.8)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = "rgba(231, 76, 60, 0.8)";
+        ctx.font = "12px Arial";
+        ctx.textAlign = "right";
+        ctx.fillText("初始液面", TANK_LEFT - 20, INITIAL_WATER_Y + 4);
+
+        // 如果液面变化，画动态箭头
+        if (Math.abs(dh) > 1.5) {
+            let arrowColor = dh > 0 ? "#e74c3c" : "#27ae60"; // 下降为红，上升为绿
+            drawArrow(ctx, TANK_LEFT - 10, INITIAL_WATER_Y, currentWaterY, arrowColor);
+        }
+
+        // 3. 画小船 (随着吃水浮动)
+        const bob = Math.sin(Date.now() / 400) * 2; // 微小海浪摇摆
+        const finalBoatY = currentBoatY + bob;
+
+        ctx.fillStyle = "#8e44ad"; // 船体颜色紫灰
+        ctx.beginPath();
+        ctx.moveTo(boatCenterX - BOAT_WIDTH/2, finalBoatY);
+        ctx.lineTo(boatCenterX + BOAT_WIDTH/2, finalBoatY);
+        ctx.lineTo(boatCenterX + BOAT_WIDTH/2 - 20, finalBoatY + BOAT_HEIGHT);
+        ctx.lineTo(boatCenterX - BOAT_WIDTH/2 + 20, finalBoatY + BOAT_HEIGHT);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#2c3e50";
+        ctx.stroke();
+
+        // 画小人 (火柴人)
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        // 身体
+        ctx.beginPath(); ctx.moveTo(boatCenterX + 10, finalBoatY); ctx.lineTo(boatCenterX + 10, finalBoatY - 25); ctx.stroke();
+        // 腿
+        ctx.beginPath(); ctx.moveTo(boatCenterX + 10, finalBoatY); ctx.lineTo(boatCenterX + 3, finalBoatY + 10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(boatCenterX + 10, finalBoatY); ctx.lineTo(boatCenterX + 17, finalBoatY + 10); ctx.stroke();
+        // 头
+        ctx.beginPath(); ctx.arc(boatCenterX + 10, finalBoatY - 30, 6, 0, Math.PI*2); ctx.fillStyle = "#f1c40f"; ctx.fill(); ctx.stroke();
+
+        // 4. 计算并绘制物品位置
+        Object.values(items).forEach(item => {
+            let targetX, targetY;
+
+            if (item.state === 'boat') {
+                targetX = boatCenterX + item.boatOffsetX;
+                targetY = finalBoatY - 10; // 放甲板上
+            } else {
+                targetX = item.waterX;
+                // 根据密度决定水中位置
+                if (item.density < D_WATER) {
+                    // 漂浮
+                    let subRatio = item.density / D_WATER;
+                    let h = item.h || item.r * 2;
+                    targetY = currentWaterY + h * (subRatio - 0.5) + bob;
+                } else if (item.density > D_WATER) {
+                    // 沉底
+                    targetY = TANK_BOTTOM - (item.r || item.h/2);
+                } else {
+                    // 悬浮 (在水中间)
+                    targetY = (currentWaterY + TANK_BOTTOM) / 2 + Math.sin(Date.now() / 600) * 5; // 悬浮缓慢游动
+                }
+            }
+
+            // 平滑移动物品
+            item.currentX += (targetX - item.currentX) * 0.15;
+            item.currentY += (targetY - item.currentY) * 0.15;
+
+            // 绘图
+            ctx.fillStyle = item.color;
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 1.5;
+
+            ctx.save();
+            ctx.translate(item.currentX, item.currentY);
+            if (item.name === '石头') {
+                ctx.beginPath(); ctx.arc(0, 0, item.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            } else if (item.name === '木头') {
+                ctx.fillRect(-item.w/2, -item.h/2, item.w, item.h); ctx.strokeRect(-item.w/2, -item.h/2, item.w, item.h);
+                // 加点木纹
+                ctx.beginPath(); ctx.moveTo(-item.w/2, 0); ctx.lineTo(item.w/2, 0); ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.stroke();
+            } else if (item.name === '鱼') {
+                // 简单的鱼形: 椭圆+尾巴
+                ctx.beginPath();
+                ctx.ellipse(0, 0, item.w/2, item.h/2, 0, 0, Math.PI*2);
+                ctx.fill(); ctx.stroke();
+                // 尾巴
+                ctx.beginPath(); ctx.moveTo(-item.w/2 + 2, 0); ctx.lineTo(-item.w/2 - 10, -8); ctx.lineTo(-item.w/2 - 10, 8); ctx.closePath();
+                ctx.fill(); ctx.stroke();
+                // 眼睛
+                ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(item.w/2 - 6, -3, 2, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        // 5. 绘制水槽外壁
+        ctx.strokeStyle = "#bdc3c7";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(TANK_LEFT, 50);
+        ctx.lineTo(TANK_LEFT, TANK_BOTTOM);
+        ctx.lineTo(TANK_RIGHT, TANK_BOTTOM);
+        ctx.lineTo(TANK_RIGHT, 50);
+        ctx.stroke();
+
+        // 底部提示
+        if (Math.abs(dh) > 1.5) {
+            let statusTxt = dh > 0 ? "液面已下降 ↓" : "液面上升 ↑";
+            let statusColor = dh > 0 ? "#e74c3c" : "#27ae60";
+            ctx.fillStyle = statusColor;
+            ctx.font = "bold 16px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(statusTxt, boatCenterX, TANK_BOTTOM + 30);
+        } else {
+            ctx.fillStyle = "#7f8c8d";
+            ctx.font = "bold 15px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("液面与初始状态一致", boatCenterX, TANK_BOTTOM + 30);
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    // 初始化运行
+    updatePhysics();
+    currentBoatY = targetBoatY; // 讓船一開始就出現在正確的水面位置，避免從天而降
+    draw();
+</script>
+
+</body>
+</html>
