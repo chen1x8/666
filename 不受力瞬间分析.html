@@ -30,7 +30,7 @@
         
         canvas {
             border-radius: 8px;
-            background-color: #2c3e50; /* 深色背景更能凸显轨迹 */
+            background-color: #2c3e50; 
             box-shadow: inset 0 0 15px rgba(0,0,0,0.3);
         }
         
@@ -145,8 +145,8 @@
                         <span>⬆️ 竖直上抛运动</span>
                     </label>
                     <label class="radio-label">
-                        <input type="radio" name="simMode" value="horizontal">
-                        <span>↗️ 平抛运动</span>
+                        <input type="radio" name="simMode" value="oblique">
+                        <span>↗️ 斜抛运动</span>
                     </label>
                     <label class="radio-label">
                         <input type="radio" name="simMode" value="pendulum">
@@ -154,13 +154,14 @@
                     </label>
                     <label class="radio-label">
                         <input type="radio" name="simMode" value="incline">
-                        <span>⛷️ 斜面加速下滑</span>
+                        <span>⛷️ 弧形斜面与斜抛</span>
                     </label>
                 </div>
             </div>
 
             <div class="control-panel">
                 <button id="btn-zero-force" class="btn-zero-force">⚡ 让所有力瞬间消失！</button>
+                <button id="btn-break-string" class="btn-zero-force" style="background-color: #9b59b6; margin-top: 10px; display: none; font-size: 15px;">✂️ 剪断摆绳 (保留重力)</button>
                 <button id="btn-slow-mo" class="btn-reset" style="background-color: #f39c12; margin-top: 10px;">⏳ 慢动作模式 (0.1x)</button>
                 <button id="btn-reset" class="btn-reset">🔄 重置当前场景</button>
             </div>
@@ -173,6 +174,7 @@
                     <div>水平速度 Vx: <span id="vxVal">0.0</span> m/s</div>
                     <div>竖直速度 Vy: <span id="vyVal">0.0</span> m/s</div>
                     <div>合速度 V: <span id="vTotalVal" class="val-highlight">0.0</span> m/s</div>
+                    <div style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">* 速度信息已同步显示在小球旁</div>
                 </div>
             </div>
         </div>
@@ -180,11 +182,10 @@
 
     <div id="info">
         <strong>💡 观察与思考指南（牛顿第一定律）：</strong><br>
-        无论小球处于何种复杂的变速运动中，只要在按下按钮的瞬间，外力合力归零，它都将严格遵守牛顿第一定律：<br>
-        1. <strong>竖直上抛：</strong> 如果在上升/下降时按，它会一直匀速上升/下降；如果在最高点（速度刚巧为0）时按，它会悬停在空中永远静止！<br>
-        2. <strong>平抛运动：</strong> 重力消失后，抛物线轨迹戛然而止，小球将沿着那一瞬间的速度方向（切线方向）做完美的匀速直线运动。<br>
-        3. <strong>单摆运动：</strong> 摆绳的拉力和重力同时消失，做圆周运动的小球会立刻失去向心力，沿着它当前所在的圆弧切线“飞出去”。<br>
-        4. <strong>斜面小球：</strong> 消失了重力沿斜面的分力，小球将不再加速，而是维持按按钮瞬间的速度，顺着斜面方向匀速滑离。
+        无论小球处于何种复杂的变速运动中，只要在按下「瞬间消失」的瞬间，外力合力归零，它都将严格遵守牛顿第一定律：<br>
+        1. <strong>斜抛运动：</strong> 在抛物线轨迹的任何瞬间消除重力，小球将沿着那一瞬间的速度方向（切线方向）做完美的等速直線運動。<br>
+        2. <strong>单摆与断绳：</strong> 在单摆运动中，如果您选择「✂️ 剪断摆绳」，小球会失去拉力但<strong>保留重力</strong>，它将顺着切线飞出，然后做平抛或斜抛运动掉落地面；若此时再按下「瞬间失重」，它将再次变为等速直線運動！<br>
+        3. <strong>弧形斜面：</strong> 小球从左侧高点滑下，在右侧离开斜面时会进行一段<strong>斜抛飞跃</strong>。您可以在它滑行、或腾空飞行的任意瞬间点击失重，观察它沿切线飞出的奇妙现象。
     </div>
 
 <script>
@@ -195,6 +196,7 @@
     const radios = document.querySelectorAll('input[name="simMode"]');
     const labels = document.querySelectorAll('.radio-label');
     const btnZeroForce = document.getElementById('btn-zero-force');
+    const btnBreakString = document.getElementById('btn-break-string');
     const btnReset = document.getElementById('btn-reset');
     const btnSlowMo = document.getElementById('btn-slow-mo');
     
@@ -209,6 +211,7 @@
     // 状态管理
     let currentMode = 'vertical';
     let forcesZeroed = false;
+    let stringBroken = false;
     let isSlowMo = false;
     let trail = []; // 轨迹点
     let trailTimer = 0; // 控制慢动作下的轨迹点生成频率
@@ -218,23 +221,30 @@
         x: 0, y: 0,
         vx: 0, vy: 0,
         r: 12,
-        color: '#f1c40f' // 明亮的黄色
+        color: '#f1c40f' 
     };
 
     // 特定场景变量
     let pend = { pivotX: 300, pivotY: 50, L: 250, theta: Math.PI/3, omega: 0 };
-    let incline = { startX: 100, startY: 100, angle: Math.PI/6, length: 500 };
+    let incline = { cx: 180, cy: 180, R: 150, startTheta: Math.PI, endTheta: Math.PI/6, theta: Math.PI, v_t: 0, inAir: false };
 
     // --- 初始化场景 ---
     function initScene(mode) {
         currentMode = mode;
         forcesZeroed = false;
+        stringBroken = false;
         trail = [];
         trailTimer = 0;
         
         btnZeroForce.classList.remove('zeroed');
         btnZeroForce.textContent = "⚡ 让所有力瞬间消失！";
         btnZeroForce.disabled = false;
+
+        btnBreakString.classList.remove('zeroed');
+        btnBreakString.textContent = "✂️ 剪断摆绳 (保留重力)";
+        btnBreakString.disabled = false;
+        // 仅在单摆模式下显示剪断绳子按钮
+        btnBreakString.style.display = (mode === 'pendulum') ? "block" : "none";
         
         forceStatusDisp.textContent = "受力中 (重力等正常作用)";
         forceStatusDisp.style.color = "#27ae60";
@@ -243,24 +253,25 @@
             ball.x = canvas.width / 2;
             ball.y = canvas.height - 30;
             ball.vx = 0;
-            ball.vy = -11; // 向上初速度
+            ball.vy = -11; 
         } 
-        else if (mode === 'horizontal') {
+        else if (mode === 'oblique') {
             ball.x = 50;
-            ball.y = 80;
-            ball.vx = 4; // 水平初速度
-            ball.vy = 0;
+            ball.y = canvas.height - 30;
+            ball.vx = 5; 
+            ball.vy = -12; // 向上和向右都有速度，形成斜抛
         } 
         else if (mode === 'pendulum') {
-            pend.theta = Math.PI / 3; // 初始角度 60度
+            pend.theta = Math.PI / 3; 
             pend.omega = 0;
-            // x, y 由 theta 推算
             updatePendulumPosition();
         } 
         else if (mode === 'incline') {
-            ball.x = incline.startX;
-            ball.y = incline.startY;
-            // 初始速度为0
+            incline.theta = incline.startTheta;
+            incline.v_t = 0;
+            incline.inAir = false;
+            ball.x = incline.cx + incline.R * Math.cos(incline.theta);
+            ball.y = incline.cy + incline.R * Math.sin(incline.theta);
             ball.vx = 0;
             ball.vy = 0;
         }
@@ -270,7 +281,6 @@
     function updatePendulumPosition() {
         ball.x = pend.pivotX + pend.L * Math.sin(pend.theta);
         ball.y = pend.pivotY + pend.L * Math.cos(pend.theta);
-        // v = ωr. 速度方向垂直于摆线
         ball.vx = pend.L * pend.omega * Math.cos(pend.theta);
         ball.vy = -pend.L * pend.omega * Math.sin(pend.theta);
     }
@@ -299,6 +309,21 @@
         }
     });
 
+    btnBreakString.addEventListener('click', () => {
+        if (!forcesZeroed && !stringBroken) {
+            stringBroken = true;
+            btnBreakString.classList.add('zeroed');
+            btnBreakString.textContent = "🧶 摆绳已断开";
+            btnBreakString.disabled = true;
+
+            forceStatusDisp.textContent = "仅受重力 (平抛/斜抛运动)";
+            forceStatusDisp.style.color = "#8e44ad";
+
+            // 捕捉断开瞬间的准确坐标系速度
+            updatePendulumPosition(); 
+        }
+    });
+
     btnZeroForce.addEventListener('click', () => {
         if (!forcesZeroed) {
             forcesZeroed = true;
@@ -306,12 +331,13 @@
             btnZeroForce.textContent = "🌌 已处于失重/无外力状态！";
             btnZeroForce.disabled = true;
             
+            btnBreakString.disabled = true; // 失重后不允许再剪绳子
+            
             forceStatusDisp.textContent = "无外力作用 (遵循惯性定律)";
             forceStatusDisp.style.color = "#e74c3c";
 
-            // 特殊处理单摆：在失重瞬间，必须完全接管直角坐标系的速度，脱离角度(theta)控制
-            if (currentMode === 'pendulum') {
-                updatePendulumPosition(); // 确保捕捉到失重那一瞬间精确的 vx 和 vy
+            if (currentMode === 'pendulum' && !stringBroken) {
+                updatePendulumPosition(); 
             }
         }
     });
@@ -320,7 +346,6 @@
     function updatePhysics() {
         let dt = isSlowMo ? 0.1 : 1.0;
 
-        // 记录轨迹点 (按物理时间记录，保证慢动作下轨迹长度视觉一致)
         trailTimer += dt;
         if (trailTimer >= 1) {
             trail.push({x: ball.x, y: ball.y});
@@ -329,62 +354,95 @@
         }
 
         if (forcesZeroed) {
-            // ======== 牛顿第一定律阶段 ========
             // 所有力消失，保持失重瞬间的 vx 和 vy，做匀速直线运动
             ball.x += ball.vx * dt;
             ball.y += ball.vy * dt;
         } else {
-            // ======== 正常物理环境阶段 ========
+            // 正常物理环境阶段
             if (currentMode === 'vertical') {
                 ball.vy += GRAVITY * dt;
                 ball.x += ball.vx * dt;
                 ball.y += ball.vy * dt;
-                // 落回地面反弹
                 if (ball.y > canvas.height - 30) { ball.y = canvas.height - 30; ball.vy *= -0.8; }
             } 
-            else if (currentMode === 'horizontal') {
+            else if (currentMode === 'oblique') {
+                // 斜抛运动：有重力，水平方向匀速
                 ball.vy += GRAVITY * dt;
                 ball.x += ball.vx * dt;
                 ball.y += ball.vy * dt;
-                // 碰到边界
                 if (ball.y > canvas.height - 30) { ball.y = canvas.height - 30; ball.vy *= -0.7; }
-                if (ball.x > canvas.width) { initScene('horizontal'); } // 飞出屏幕则重置
+                if (ball.x > canvas.width || ball.x < 0) { initScene('oblique'); } 
             } 
             else if (currentMode === 'pendulum') {
-                // 单摆角加速度 alpha = -(g/L) * sin(theta)
-                let alpha = -(GRAVITY / 50) * Math.sin(pend.theta);
-                pend.omega += alpha * dt;
-                pend.theta += pend.omega * dt;
-                updatePendulumPosition();
+                if (stringBroken) {
+                    // 绳子断了，只受重力，类似斜抛或平抛
+                    ball.vy += GRAVITY * dt;
+                    ball.x += ball.vx * dt;
+                    ball.y += ball.vy * dt;
+                    // 落到地面反弹
+                    if (ball.y > canvas.height - 30) { 
+                        ball.y = canvas.height - 30; 
+                        ball.vy *= -0.6; 
+                        ball.vx *= 0.9; // 地面摩擦力
+                    }
+                    if (ball.x > canvas.width || ball.x < 0) { initScene('pendulum'); }
+                } else {
+                    // 正常的单摆运动
+                    let alpha = -(GRAVITY / 50) * Math.sin(pend.theta);
+                    pend.omega += alpha * dt;
+                    pend.theta += pend.omega * dt;
+                    updatePendulumPosition();
+                }
             } 
             else if (currentMode === 'incline') {
-                // 斜面加速度 a = g * sin(angle)
-                let a = GRAVITY * Math.sin(incline.angle);
-                // 将加速度分解到 x 和 y 轴
-                ball.vx += a * Math.cos(incline.angle) * dt;
-                ball.vy += a * Math.sin(incline.angle) * dt;
-                ball.x += ball.vx * dt;
-                ball.y += ball.vy * dt;
-                
-                // 判断是否到达斜面底部，如果到了就在平地上滑行
-                let d = Math.sqrt(Math.pow(ball.x - incline.startX, 2) + Math.pow(ball.y - incline.startY, 2));
-                if (d > incline.length) {
-                    ball.vy = 0; // 撞击地面，竖直速度归零 (简化)
-                    ball.y = incline.startY + incline.length * Math.sin(incline.angle);
+                if (!incline.inAir) {
+                    // 在圆弧斜面上滑行
+                    let a_t = GRAVITY * Math.cos(incline.theta); // 切向加速度
+                    incline.v_t += a_t * dt;
+                    incline.theta += (incline.v_t / incline.R) * dt;
+                    
+                    if (incline.theta <= incline.endTheta) {
+                        incline.inAir = true; // 离开斜面，进入空中抛体阶段
+                        ball.vx = incline.v_t * (-Math.sin(incline.endTheta));
+                        ball.vy = incline.v_t * Math.cos(incline.endTheta);
+                        ball.x = incline.cx + incline.R * Math.cos(incline.endTheta);
+                        ball.y = incline.cy + incline.R * Math.sin(incline.endTheta);
+                    } else {
+                        // 还在轨道上，更新小球坐标和瞬时切向速度
+                        ball.vx = incline.v_t * (-Math.sin(incline.theta));
+                        ball.vy = incline.v_t * Math.cos(incline.theta);
+                        ball.x = incline.cx + incline.R * Math.cos(incline.theta);
+                        ball.y = incline.cy + incline.R * Math.sin(incline.theta);
+                    }
+                } else {
+                    // 离开斜面后的斜抛运动
+                    ball.vy += GRAVITY * dt;
+                    ball.x += ball.vx * dt;
+                    ball.y += ball.vy * dt;
+                    
+                    // 落地反弹及重置
+                    if (ball.y > canvas.height - 30) {
+                        ball.y = canvas.height - 30; 
+                        ball.vy *= -0.7;
+                        ball.vx *= 0.9;
+                    }
+                    if (ball.x > canvas.width) {
+                        initScene('incline');
+                    }
                 }
             }
         }
 
         // 更新仪表盘
         vxValDisp.textContent = ball.vx.toFixed(2);
-        vyValDisp.textContent = (-ball.vy).toFixed(2); // Y轴向下为正，物理习惯向上为正
+        vyValDisp.textContent = (-ball.vy).toFixed(2); 
         let vTotal = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
         vTotalValDisp.textContent = vTotal.toFixed(2);
     }
 
     // --- 绘图引擎 ---
     function drawArrow(ctx, fromx, fromy, tox, toy, color) {
-        if (Math.abs(fromx-tox) < 1 && Math.abs(fromy-toy) < 1) return; // 速度为0不画
+        if (Math.abs(fromx-tox) < 1 && Math.abs(fromy-toy) < 1) return; 
         const headlen = 10;
         const dx = tox - fromx;
         const dy = toy - fromy;
@@ -402,75 +460,78 @@
     }
 
     function draw() {
-        // 清理画布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // 1. 绘制环境要素
         if (currentMode === 'pendulum') {
-            // 画天花板和支点
             ctx.fillStyle = '#7f8c8d';
             ctx.fillRect(pend.pivotX - 50, 0, 100, 10);
             ctx.beginPath(); ctx.arc(pend.pivotX, pend.pivotY, 4, 0, Math.PI*2); ctx.fill();
             
-            // 画摆线 (如果没有失重的话)
-            if (!forcesZeroed) {
+            if (!forcesZeroed && !stringBroken) {
+                // 正常的绳子
                 ctx.beginPath();
                 ctx.moveTo(pend.pivotX, pend.pivotY);
                 ctx.lineTo(ball.x, ball.y);
                 ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
                 ctx.lineWidth = 2;
                 ctx.stroke();
-            } else {
-                // 如果失重，画一根断掉的线
+            } else if (stringBroken && !forcesZeroed) {
+                // 绳子刚断，画一个留在支点上的短残余绳子
                 ctx.beginPath();
                 ctx.moveTo(pend.pivotX, pend.pivotY);
                 ctx.lineTo(pend.pivotX + 20*Math.sin(pend.theta), pend.pivotY + 20*Math.cos(pend.theta));
-                ctx.strokeStyle = "rgba(231, 76, 60, 0.8)"; // 红色断线
+                ctx.strokeStyle = "rgba(155, 89, 182, 0.8)"; // 紫色断线
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else if (forcesZeroed) {
+                // 彻底失重
+                ctx.beginPath();
+                ctx.moveTo(pend.pivotX, pend.pivotY);
+                ctx.lineTo(pend.pivotX + 20*Math.sin(pend.theta), pend.pivotY + 20*Math.cos(pend.theta));
+                ctx.strokeStyle = "rgba(231, 76, 60, 0.8)"; 
                 ctx.lineWidth = 2;
                 ctx.stroke();
             }
         } 
         else if (currentMode === 'incline') {
-            // 画斜面
-            const endX = incline.startX + incline.length * Math.cos(incline.angle);
-            const endY = incline.startY + incline.length * Math.sin(incline.angle);
+            const startX = incline.cx + incline.R * Math.cos(incline.startTheta);
+            const startY = incline.cy + incline.R * Math.sin(incline.startTheta);
+            const endX = incline.cx + incline.R * Math.cos(incline.endTheta);
+            const endY = incline.cy + incline.R * Math.sin(incline.endTheta);
             
-            ctx.beginPath();
-            ctx.moveTo(incline.startX - 50, incline.startY);
-            ctx.lineTo(incline.startX, incline.startY);
-            ctx.lineTo(endX, endY);
-            ctx.lineTo(canvas.width, endY);
             // 填充斜面下方
-            ctx.lineTo(canvas.width, canvas.height);
-            ctx.lineTo(0, canvas.height);
-            ctx.lineTo(0, incline.startY);
+            ctx.beginPath();
+            ctx.arc(incline.cx, incline.cy, incline.R, incline.startTheta, incline.endTheta, true); // true = 逆时针画弧
+            ctx.lineTo(endX, canvas.height - 20);
+            ctx.lineTo(startX, canvas.height - 20);
+            ctx.closePath();
             ctx.fillStyle = 'rgba(149, 165, 166, 0.3)';
             ctx.fill();
             
-            // 斜面实线
+            // 画圆弧轨道实线
             ctx.beginPath();
-            ctx.moveTo(incline.startX, incline.startY);
-            ctx.lineTo(endX, endY);
+            ctx.arc(incline.cx, incline.cy, incline.R, incline.startTheta, incline.endTheta, true);
             ctx.strokeStyle = '#95a5a6';
             ctx.lineWidth = 4;
             ctx.stroke();
         } 
-        else if (currentMode === 'vertical' || currentMode === 'horizontal') {
-            // 画个简单的地面
+        
+        // 统一下方需要有地面的场景
+        if (currentMode === 'vertical' || currentMode === 'oblique' || currentMode === 'pendulum') {
             ctx.fillStyle = 'rgba(149, 165, 166, 0.3)';
             ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
             ctx.beginPath(); ctx.moveTo(0, canvas.height - 20); ctx.lineTo(canvas.width, canvas.height - 20); 
             ctx.strokeStyle = '#95a5a6'; ctx.lineWidth=2; ctx.stroke();
         }
 
-        // 2. 绘制轨迹 (Trail)
+        // 2. 绘制轨迹
         if (trail.length > 1) {
             ctx.beginPath();
             ctx.moveTo(trail[0].x, trail[0].y);
             for (let i = 1; i < trail.length; i++) {
                 ctx.lineTo(trail[i].x, trail[i].y);
             }
-            // 正常受力时是淡白色虚线，失重后轨迹变成红色醒目实线
             if (forcesZeroed) {
                 ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
                 ctx.lineWidth = 2.5;
@@ -493,17 +554,46 @@
         ctx.strokeStyle = "rgba(255,255,255,0.8)";
         ctx.stroke();
 
-        // 4. 绘制醒目的速度向量箭头 (红色)
-        // 将速度放大 5 倍以便视觉观察
+        // 4. 绘制速度向量箭头
         const arrowScale = 5; 
         drawArrow(ctx, ball.x, ball.y, ball.x + ball.vx * arrowScale, ball.y + ball.vy * arrowScale, "#e74c3c");
 
-        // 5. 提示文字
+        // 5. 绘制跟随HUD
+        let vTotal = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        let textX = ball.x + 20;
+        let textY = ball.y - 25;
+        
+        if (textX > canvas.width - 90) textX = ball.x - 90;
+        if (textY < 20) textY = ball.y + 45;
+        if (textY > canvas.height - 60) textY = ball.y - 50;
+
+        ctx.fillStyle = "rgba(30, 40, 50, 0.75)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(textX - 8, textY - 14, 90, 52, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#ecf0f1";
+        ctx.font = "12px Consolas, monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(`Vx: ${ball.vx.toFixed(2)}`, textX, textY);
+        ctx.fillText(`Vy: ${(-ball.vy).toFixed(2)}`, textX, textY + 16);
+        ctx.fillStyle = "#e74c3c"; 
+        ctx.fillText(`V : ${vTotal.toFixed(2)}`, textX, textY + 32);
+
+        // 6. 提示文字
         if (forcesZeroed) {
             ctx.fillStyle = "rgba(231, 76, 60, 0.8)";
             ctx.font = "bold 24px Arial";
             ctx.textAlign = "center";
-            ctx.fillText("无外力，保持匀速直线运动！", canvas.width/2, 40);
+            ctx.fillText("无外力，保持等速直线运动！", canvas.width/2, 40);
+        } else if (stringBroken) {
+            ctx.fillStyle = "rgba(155, 89, 182, 0.8)";
+            ctx.font = "bold 24px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("仅受重力，进行抛体运动！", canvas.width/2, 40);
         }
 
         requestAnimationFrame(() => {
