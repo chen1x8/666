@@ -83,6 +83,28 @@
             height: 16px;
         }
 
+        .btn-push {
+            width: 100%;
+            padding: 10px;
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            margin-top: 15px;
+        }
+
+        .btn-push:hover {
+            background-color: #d35400;
+        }
+
+        .btn-push:active {
+            transform: scale(0.97);
+        }
+
         .legend {
             margin-top: 20px;
             padding-top: 15px;
@@ -151,13 +173,15 @@
             <input type="range" id="speedSlider" min="0" max="100" value="80">
         </div>
 
-        <div class="control-group" style="margin-top: 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <div class="control-group" style="margin-top: 20px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
             <div style="font-weight: bold; margin-bottom: 10px; color: #f39c12;">核心構造控制：</div>
             <label class="checkbox-group">
                 <input type="checkbox" id="toggleComm" checked> 
                 <span style="font-weight:bold;">啟用換向器 (Commutator)</span>
             </label>
             <div style="font-size: 12px; color: #bdc3c7; padding-left: 26px;">關閉時將切換為連續滑環，觀察缺少換向器的嚴重後果。</div>
+            
+            <button id="btnPush" class="btn-push">🖐️ 推一下 (手動撥動線圈)</button>
         </div>
 
         <div class="control-group" style="margin-top: 15px;">
@@ -183,7 +207,7 @@
     <div id="info-panel">
         <strong>💡 換向器 (Commutator) 的核心作用：</strong><br><br>
         ✅ <strong>開啟時 (半圓環)：</strong>當線圈越過垂直面時，換向器會切換接觸的電刷，使線圈內的<span class="highlight">電流方向瞬間反轉</span>。這保證了兩側受力始終維持順時針轉矩，馬達得以持續旋轉。<br><br>
-        ❌ <strong>關閉時 (完整滑環)：</strong>電流方向被固定。當線圈越過垂直面後，雖然受力方向不變，但力臂反轉，導致<span class="highlight">轉矩反向</span>。線圈會像鐘擺一樣來回振盪，最終在阻力下卡死在垂直中性面上！
+        ❌ <strong>關閉時 (完整滑環)：</strong>電流方向被固定。當線圈越過垂直面後，雖然受力方向不變，但力臂反轉，導致<span class="highlight">轉矩反向</span>。線圈會像鐘擺一樣來回振盪，最終在阻力下卡死在垂直中性面上！可以使用「推一下」來給予外力打破平衡。
     </div>
 
     <!-- 加入 Import Map 以解決模組解析錯誤 -->
@@ -389,12 +413,19 @@
         const cbToggleB = document.getElementById('toggleB');
         const cbToggleI = document.getElementById('toggleI');
         const cbToggleF = document.getElementById('toggleF');
+        const btnPush = document.getElementById('btnPush');
 
         let voltageLevel = 0.8;
 
         speedSlider.addEventListener('input', (e) => {
             voltageLevel = parseInt(e.target.value) / 100;
             speedValDisp.textContent = e.target.value + '%';
+        });
+
+        // 監聽推一下按鈕
+        btnPush.addEventListener('click', () => {
+            // 賦予線圈一個明顯的瞬間角速度，幫助它越過死點
+            omega -= 0.15; 
         });
 
         function updatePhysicsAndArrows() {
