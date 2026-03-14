@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>我的 GitHub 实验项目列表</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; line-height: 1.6; background: #f9f9f9; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; font-size: 24px; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 10px 0; border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; }
+        a { text-decoration: none; color: #007bff; font-weight: bold; }
+        a:hover { color: #0056b3; text-decoration: underline; }
+        .loading { color: #888; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>物理实验仿真目录</h1>
+    <ul id="file-list">
+        <li class="loading">正在获取文件列表...</li>
+    </ul>
+</div>
+
+<script>
+    // --- 配置区域 ---
+    const USERNAME = 'chen1x8'; // 你的 GitHub 用户名
+    const REPO_NAME = '666'; // 你的仓库名称
+    // ----------------
+
+    async function fetchFiles() {
+        const apiUrl = `https://api.github.com/repos/${USERNAME}/${REPO_NAME}/contents/`;
+        const listElement = document.getElementById('file-list');
+
+        try {
+            const response = await fetch(apiUrl);
+            const files = await response.json();
+
+            listElement.innerHTML = ''; // 清空加载提示
+
+            // 过滤出所有以 .html 结尾的文件，并排除 index.html 自身
+            const htmlFiles = files.filter(file => 
+                file.name.endsWith('.html') && file.name !== 'index.html'
+            );
+
+            if (htmlFiles.length === 0) {
+                listElement.innerHTML = '<li>未找到其他 HTML 页面。</li>';
+                return;
+            }
+
+            htmlFiles.forEach(file => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                // 使用相对路径进行跳转
+                a.href = file.name;
+                // 去掉文件名末尾的 .html 让显示更美观
+                a.textContent = file.name.replace('.html', '');
+                li.appendChild(a);
+                listElement.appendChild(li);
+            });
+        } catch (error) {
+            console.error('获取文件失败:', error);
+            listElement.innerHTML = '<li style="color:red;">加载失败，请检查用户名或仓库名是否正确。</li>';
+        }
+    }
+
+    fetchFiles();
+</script>
+
+</body>
+</html>
