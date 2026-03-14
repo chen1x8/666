@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M形杠杆平衡态演示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { touch-action: none; }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col">
+        <!-- Header -->
+        <div class="bg-blue-600 text-white py-4 px-6 text-center">
+            <h1 class="text-2xl font-bold">M形杠杆平衡态稳定性演示</h1>
+            <p class="text-blue-100 text-sm mt-1">拖动滑块改变倾角，点击“松手”观察甲、乙两个杠杆的运动</p>
+        </div>
+
+        <!-- Canvas Area -->
+        <div class="relative w-full aspect-[2/1] bg-slate-50 border-b border-slate-200">
+            <canvas id="simCanvas" class="w-full h-full block"></canvas>
+            
+            <!-- Labels overlay -->
+            <div class="absolute bottom-4 left-1/4 -translate-x-1/2 text-center">
+                <h2 class="text-xl font-bold text-slate-800">图 甲</h2>
+                <p id="statusA" class="text-sm text-red-600 font-medium h-5">（不稳定平衡）</p>
+            </div>
+            <div class="absolute bottom-4 left-3/4 -translate-x-1/2 text-center">
+                <h2 class="text-xl font-bold text-slate-800">图 乙</h2>
+                <p id="statusB" class="text-sm text-emerald-600 font-medium h-5">（稳定平衡）</p>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="p-6 bg-white space-y-6">
+            <div class="flex flex-col items-center max-w-md mx-auto">
+                <div class="flex justify-between w-full text-sm text-slate-500 mb-2 font-medium">
+                    <span>逆时针偏转</span>
+                    <span id="angleValueDisplay">当前角度: 0°</span>
+                    <span>顺时针偏转</span>
+                </div>
+                <input type="range" id="angleSlider" min="-40" max="40" value="0" step="1" class="w-full">
+            </div>
+
+            <div class="flex justify-center gap-4">
+                <button id="releaseBtn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    ✋ 松开手 (Release)
+                </button>
+                <button id="resetBtn" class="px-8 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-full shadow transition-all active:scale-95">
+                    ↺ 重置 (Reset)
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6 text-sm text-slate-600 mt-4 border-t pt-4">
+                <div>
+                    <strong class="text-red-600">甲的物理原理：</strong> 悬挂点连线中点（等效重心，红点）在转轴 $O$ 的<strong class="text-slate-800">上方</strong>。轻微偏转后，重力产生的力矩会<strong class="text-slate-800">增大</strong>偏转角度，属于<strong>不稳定平衡</strong>。
+                </div>
+                <div>
+                    <strong class="text-emerald-600">乙的物理原理：</strong> 悬挂点连线中点（等效重心，红点）在转轴 $O$ 的<strong class="text-slate-800">下方</strong>。轻微偏转后，重力会产生<strong class="text-slate-800">反向恢复力矩</strong>，使其摇摆并最终恢复原状，属于<strong>稳定平衡</strong>。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const angleSlider = document.getElementById('angleSlider');
+        const releaseBtn = document.getElementById('releaseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const angleValueDisplay = document.getElementById('angleValueDisplay');
+        const statusA = document.getElementById('statusA');
+        const statusB = document.getElementById('statusB');
+
+        // State variables
+        let angleA = 0; // in radians
+        let angleB = 0;
+        let velA = 0;
+        let velB = 0;
+        let isSimulating = false;
+        let animationFrameId;
+
+        // Physics constants
+        const gravityConstant = 0.003; 
+        const damping = 0.96; // Air/friction damping
+
+        // Lever geometry definitions
+        // (x, y) relative to pivot. Note: Canvas Y is DOWN.
+        // Therefore, y < 0 means physically ABOVE the pivot. y > 0 means BELOW.
+        const leverA_pts = [
+            {x: 0, y: 0},       // Pivot O
+            {x: 35, y: -45},    // Arch peak
+            {x: 80, y: -15}     // Endpoint (Above pivot O -> y is negative)
+        ];
+        
+        const leverB_pts = [
+            {x: 0, y: 0},       // Pivot O
+            {x: 35, y: -30},    // Arch peak
+            {x: 80, y: 45}      // Endpoint (Below pivot O -> y is positive)
+        ];
+
+        // Resize handler for crisp rendering
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * 2; // High DPI
+            canvas.height = rect.height * 2;
+            ctx.scale(2, 2);
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Drawing function for a single lever
+        function drawLever(centerX, centerY, angle, pts, name) {
+            ctx.save();
+            ctx.translate(centerX, centerY);
+
+            // Draw pivot background
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+
+            // Rotate for the rigid lever body
+            ctx.rotate(angle);
+
+            // 1. Draw Lever Body (M Shape)
+            ctx.beginPath();
+            ctx.moveTo(0, 0); // start at pivot
+            ctx.lineTo(pts[1].x, pts[1].y);
+            ctx.lineTo(pts[2].x, pts[2].y);
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-pts[1].x, pts[1].y);
+            ctx.lineTo(-pts[2].x, pts[2].y);
+            
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            // Store endpoints for string attachment
+            const rightEndX = pts[2].x;
+            const rightEndY = pts[2].y;
+            const leftEndX = -pts[2].x;
+            const leftEndY = pts[2].y;
+
+            // Draw small attachment rings
+            ctx.beginPath();
+            ctx.arc(rightEndX, rightEndY, 4, 0, Math.PI * 2);
+            ctx.arc(leftEndX, leftEndY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.fill();
+            ctx.stroke();
+
+            // 2. Center of Gravity Visualization (Dashed line and point)
+            ctx.beginPath();
+            ctx.moveTo(leftEndX, leftEndY);
+            ctx.lineTo(rightEndX, rightEndY);
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)'; // Red dashed
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]); // reset
+
+            // The effective Center of Gravity (CG) of the two equal weights
+            const cgY = rightEndY; 
+            ctx.beginPath();
+            ctx.arc(0, cgY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ef4444'; // Red dot representing CG
+            ctx.fill();
+
+            // Restore canvas context to un-rotated state to draw vertical strings
+            ctx.restore(); 
+
+            // Calculate world coordinates of endpoints for vertical hanging
+            const cosA = Math.cos(angle);
+            const sinA = Math.sin(angle);
+            const worldRightX = centerX + rightEndX * cosA - rightEndY * sinA;
+            const worldRightY = centerY + rightEndX * sinA + rightEndY * cosA;
+            const worldLeftX = centerX + leftEndX * cosA - leftEndY * sinA;
+            const worldLeftY = centerY + leftEndX * sinA + leftEndY * cosA;
+
+            // 3. Draw Strings & Weights
+            const stringLen = 90;
+            const weightW = 46;
+            const weightH = 36;
+            
+            // Strings
+            ctx.beginPath();
+            ctx.moveTo(worldRightX, worldRightY);
+            ctx.lineTo(worldRightX, worldRightY + stringLen);
+            ctx.moveTo(worldLeftX, worldLeftY);
+            ctx.lineTo(worldLeftX, worldLeftY + stringLen);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Weights
+            ctx.fillStyle = '#94a3b8'; // gray
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+
+            // Right Weight
+            ctx.fillRect(worldRightX - weightW/2, worldRightY + stringLen, weightW, weightH);
+            ctx.strokeRect(worldRightX - weightW/2, worldRightY + stringLen, weightW, weightH);
+            
+            // Left Weight
+            ctx.fillRect(worldLeftX - weightW/2, worldLeftY + stringLen, weightW, weightH);
+            ctx.strokeRect(worldLeftX - weightW/2, worldLeftY + stringLen, weightW, weightH);
+
+            // Finally, redraw the Pivot O on top of everything
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'black';
+            ctx.font = 'italic 16px serif';
+            ctx.fillText('O', centerX - 6, centerY + 22);
+        }
+
+        // Main render loop
+        function draw() {
+            const width = canvas.width / 2;
+            const height = canvas.height / 2;
+            
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Axis lines for reference
+            ctx.beginPath();
+            ctx.moveTo(0, height * 0.35);
+            ctx.lineTo(width, height * 0.35);
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw Lever 甲 (Left half)
+            drawLever(width * 0.25, height * 0.35, angleA, leverA_pts, 'A');
+            
+            // Draw Lever 乙 (Right half)
+            drawLever(width * 0.75, height * 0.35, angleB, leverB_pts, 'B');
+        }
+
+        // Physics Simulation Update
+        function updatePhysics() {
+            if (!isSimulating) return;
+
+            // Torque physics calculation:
+            // Angular Acceleration (alpha) is proportional to Torque.
+            // Torque = -2 * m * g * y0 * sin(theta)
+            // where y0 is the vertical distance of the endpoints from pivot in standard coordinates.
+            // In Canvas, Y is down, so `lever_pts[2].y` acts directly as `y0`.
+            // If y0 < 0 (above pivot, 甲), accel and angle have SAME sign -> diverges (unstable).
+            // If y0 > 0 (below pivot, 乙), accel and angle have OPPOSITE sign -> restores (stable).
+
+            // Update 甲 (A)
+            if (Math.abs(angleA) < Math.PI / 2) { 
+                let accelA = -gravityConstant * leverA_pts[2].y * Math.sin(angleA);
+                velA += accelA;
+                velA *= damping;
+                angleA += velA;
+            } else {
+                // Hit the ground/limit
+                angleA = Math.sign(angleA) * Math.PI / 2;
+                velA = 0;
+                statusA.innerText = "已倾倒！(无法恢复)";
+            }
+
+            // Update 乙 (B)
+            let accelB = -gravityConstant * leverB_pts[2].y * Math.sin(angleB);
+            velB += accelB;
+            velB *= damping;
+            angleB += velB;
+
+            // Stop microscopic jitters for B
+            if (Math.abs(velB) < 0.0001 && Math.abs(angleB) < 0.001) {
+                angleB = 0;
+                velB = 0;
+                statusB.innerText = "已恢复平衡！";
+            } else if (isSimulating) {
+                statusB.innerText = "摇摆恢复中...";
+            }
+
+            draw();
+            animationFrameId = requestAnimationFrame(updatePhysics);
+        }
+
+        // Event Listeners
+        angleSlider.addEventListener('input', (e) => {
+            isSimulating = false;
+            cancelAnimationFrame(animationFrameId);
+            
+            const deg = parseInt(e.target.value);
+            const rad = deg * (Math.PI / 180);
+            
+            angleA = rad;
+            angleB = rad;
+            velA = 0;
+            velB = 0;
+            
+            angleValueDisplay.innerText = `当前角度: ${deg}°`;
+            releaseBtn.disabled = false;
+            
+            statusA.innerText = "（拖动中）";
+            statusB.innerText = "（拖动中）";
+
+            draw();
+        });
+
+        releaseBtn.addEventListener('click', () => {
+            if (angleA === 0) return; // Nothing to simulate
+            isSimulating = true;
+            releaseBtn.disabled = true;
+            statusA.innerText = "倾覆中...";
+            statusB.innerText = "摇摆恢复中...";
+            updatePhysics();
+        });
+
+        resetBtn.addEventListener('click', () => {
+            isSimulating = false;
+            cancelAnimationFrame(animationFrameId);
+            
+            angleSlider.value = 0;
+            angleA = 0;
+            angleB = 0;
+            velA = 0;
+            velB = 0;
+            
+            angleValueDisplay.innerText = `当前角度: 0°`;
+            releaseBtn.disabled = false;
+            
+            statusA.innerText = "（不稳定平衡）";
+            statusB.innerText = "（稳定平衡）";
+
+            draw();
+        });
+
+        // Initialize
+        setTimeout(() => {
+            resizeCanvas();
+        }, 100);
+
+    </script>
+</body>
+</html>
