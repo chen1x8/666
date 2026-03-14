@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>直流電動機 3D 原理模擬器</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ecf0f1;
+        }
+        
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            background: rgba(30, 40, 50, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 10px 0;
+            color: #3498db;
+            text-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+        }
+
+        p.subtitle {
+            font-size: 13px;
+            color: #bdc3c7;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #e74c3c;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #ecf0f1;
+        }
+
+        .checkbox-group input {
+            margin-right: 10px;
+            cursor: pointer;
+            accent-color: #3498db;
+            width: 16px;
+            height: 16px;
+        }
+
+        .legend {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+
+        #info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(30, 40, 50, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 420px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #ecf0f1;
+            border-left: 4px solid #e74c3c;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .highlight { color: #f1c40f; font-weight: bold; }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            transition: opacity 0.5s;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">載入 3D 引擎中...</div>
+    <div id="canvas-container"></div>
+
+    <div id="ui-container">
+        <h1>直流電動機 3D 模擬</h1>
+        <p class="subtitle">滑鼠左鍵拖曳旋轉視角，滾輪縮放。</p>
+
+        <div class="control-group">
+            <label for="speedSlider">
+                <span>施加電壓 (驅動力):</span>
+                <span id="speedVal">80%</span>
+            </label>
+            <input type="range" id="speedSlider" min="0" max="100" value="80">
+        </div>
+
+        <div class="control-group" style="margin-top: 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #f39c12;">核心構造控制：</div>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleComm" checked> 
+                <span style="font-weight:bold;">啟用換向器 (Commutator)</span>
+            </label>
+            <div style="font-size: 12px; color: #bdc3c7; padding-left: 26px;">關閉時將切換為連續滑環，觀察缺少換向器的嚴重後果。</div>
+        </div>
+
+        <div class="control-group" style="margin-top: 15px;">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">物理向量視覺化：</div>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleB" checked> 顯示磁場方向 (B)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleI" checked> 顯示電流方向 (I)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleF" checked> 顯示勞侖茲力 (F)
+            </label>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="color-box" style="background: #3498db;"></div> 磁場 B (向右恆定)</div>
+            <div class="legend-item"><div class="color-box" style="background: #f1c40f;"></div> 電流 I (導線內方向)</div>
+            <div class="legend-item"><div class="color-box" style="background: #e74c3c;"></div> 勞侖茲力 F = I × B</div>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        <strong>💡 換向器 (Commutator) 的核心作用：</strong><br><br>
+        ✅ <strong>開啟時 (半圓環)：</strong>當線圈越過垂直面時，換向器會切換接觸的電刷，使線圈內的<span class="highlight">電流方向瞬間反轉</span>。這保證了兩側受力始終維持順時針轉矩，馬達得以持續旋轉。<br><br>
+        ❌ <strong>關閉時 (完整滑環)：</strong>電流方向被固定。當線圈越過垂直面後，雖然受力方向不變，但力臂反轉，導致<span class="highlight">轉矩反向</span>。線圈會像鐘擺一樣來回振盪，最終在阻力下卡死在垂直中性面上！
+    </div>
+
+    <!-- 加入 Import Map 以解決模組解析錯誤 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- 初始化 Three.js 場景 ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#121212'); 
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(150, 100, 250);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        document.getElementById('loading').style.opacity = '0';
+        setTimeout(() => document.getElementById('loading').remove(), 500);
+
+        // --- 燈光設定 (調亮環境光) ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); // 調亮
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(100, 200, 100);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        backLight.position.set(-100, -100, -100);
+        scene.add(backLight);
+
+        // --- 物理與幾何參數 ---
+        const R = 30; // 線圈半徑 (寬度的一半)
+        const L = 80; // 線圈長度 (沿 Z 軸)
+        
+        // 物理引擎變數 (引入角速度與角加速度)
+        let omega = 0; // 角速度
+        
+        // --- 建立材質 ---
+        const matCopper = new THREE.MeshStandardMaterial({ color: '#b87333', metalness: 0.8, roughness: 0.2 });
+        const matWire = new THREE.MeshStandardMaterial({ color: '#c0392b', metalness: 0.5, roughness: 0.5 });
+        const matNorth = new THREE.MeshStandardMaterial({ color: '#e74c3c', metalness: 0.3, roughness: 0.4 });
+        const matSouth = new THREE.MeshStandardMaterial({ color: '#2980b9', metalness: 0.3, roughness: 0.4 });
+        const matBrush = new THREE.MeshStandardMaterial({ color: '#2c3e50', metalness: 0.9, roughness: 0.1 });
+
+        // ==========================================
+        // 1. 建立定子 (永久磁鐵)
+        // ==========================================
+        const magnetGeo = new THREE.BoxGeometry(20, 80, 120);
+        const northPole = new THREE.Mesh(magnetGeo, matNorth);
+        northPole.position.set(-70, 0, 0);
+        scene.add(northPole);
+
+        const southPole = new THREE.Mesh(magnetGeo, matSouth);
+        southPole.position.set(70, 0, 0);
+        scene.add(southPole);
+
+        // ==========================================
+        // 2. 建立轉子 (電樞線圈與換向器)
+        // ==========================================
+        const rotorGroup = new THREE.Group();
+        scene.add(rotorGroup);
+
+        const axisGeo = new THREE.CylinderGeometry(2, 2, 180, 16);
+        axisGeo.rotateX(Math.PI / 2);
+        const axis = new THREE.Mesh(axisGeo, new THREE.MeshStandardMaterial({color: '#7f8c8d', metalness: 0.8}));
+        rotorGroup.add(axis);
+
+        const wireGeoL = new THREE.CylinderGeometry(1.5, 1.5, L, 16);
+        wireGeoL.rotateX(Math.PI / 2); 
+        const wireGeoW = new THREE.CylinderGeometry(1.5, 1.5, R * 2, 16);
+
+        const wireA = new THREE.Mesh(wireGeoL, matWire);
+        wireA.position.set(R, 0, 0);
+        rotorGroup.add(wireA);
+
+        const wireB = new THREE.Mesh(wireGeoL, matWire);
+        wireB.position.set(-R, 0, 0);
+        rotorGroup.add(wireB);
+
+        const wireBack = new THREE.Mesh(wireGeoW, matWire);
+        wireBack.rotateZ(Math.PI / 2);
+        wireBack.position.set(0, 0, L/2);
+        rotorGroup.add(wireBack);
+
+        const wireFrontA = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, R, 16), matWire);
+        wireFrontA.rotateZ(Math.PI / 2);
+        wireFrontA.position.set(R/2, 0, -L/2);
+        rotorGroup.add(wireFrontA);
+
+        const wireFrontB = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, R, 16), matWire);
+        wireFrontB.rotateZ(Math.PI / 2);
+        wireFrontB.position.set(-R/2, 0, -L/2);
+        rotorGroup.add(wireFrontB);
+
+        // 換向器組件
+        const commRadius = 8;
+        const commLength = 15;
+        const commZ = -L/2 - 15;
+        
+        // A. 斷開的半圓環 (有換向器)
+        const splitRingGroup = new THREE.Group();
+        const halfCommGeo = new THREE.CylinderGeometry(commRadius, commRadius, commLength, 32, 1, false, 0.1, Math.PI - 0.2);
+        halfCommGeo.rotateX(Math.PI / 2);
+
+        const commA = new THREE.Mesh(halfCommGeo, matCopper);
+        commA.position.set(0, 0, commZ);
+        splitRingGroup.add(commA);
+
+        const commB = new THREE.Mesh(halfCommGeo, matCopper);
+        commB.rotateZ(Math.PI);
+        commB.position.set(0, 0, commZ);
+        splitRingGroup.add(commB);
+        rotorGroup.add(splitRingGroup);
+
+        // B. 連續的滑環 (無換向器)
+        const slipRingGroup = new THREE.Group();
+        const slipGeo = new THREE.CylinderGeometry(commRadius, commRadius, commLength/2 - 1, 32);
+        slipGeo.rotateX(Math.PI / 2);
+        
+        const slipA = new THREE.Mesh(slipGeo, matCopper);
+        slipA.position.set(0, 0, commZ + commLength/4);
+        slipRingGroup.add(slipA);
+        
+        const slipB = new THREE.Mesh(slipGeo, matCopper);
+        slipB.position.set(0, 0, commZ - commLength/4);
+        slipRingGroup.add(slipB);
+        
+        rotorGroup.add(slipRingGroup);
+        slipRingGroup.visible = false; // 預設隱藏
+
+        // ==========================================
+        // 3. 建立電刷與外部電路
+        // ==========================================
+        const brushGeo = new THREE.BoxGeometry(8, 10, commLength + 2); // 寬度覆蓋兩種環
+        const brushPos = new THREE.Mesh(brushGeo, matBrush);
+        brushPos.position.set(commRadius + 4, 0, commZ);
+        scene.add(brushPos);
+
+        const brushNeg = new THREE.Mesh(brushGeo, matBrush);
+        brushNeg.position.set(-(commRadius + 4), 0, commZ);
+        scene.add(brushNeg);
+
+        const extWireMat = new THREE.LineBasicMaterial({ color: '#555', linewidth: 2 });
+        const extWireGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(commRadius + 4, -5, commZ),
+            new THREE.Vector3(commRadius + 20, -30, commZ),
+            new THREE.Vector3(-(commRadius + 20), -30, commZ),
+            new THREE.Vector3(-(commRadius + 4), -5, commZ)
+        ]);
+        const extWire = new THREE.Line(extWireGeo, extWireMat);
+        scene.add(extWire);
+
+        const batteryBox = new THREE.Mesh(new THREE.BoxGeometry(20, 15, 10), new THREE.MeshStandardMaterial({color: '#27ae60'}));
+        batteryBox.position.set(0, -30, commZ);
+        scene.add(batteryBox);
+
+        // ==========================================
+        // 4. 建立物理向量箭頭
+        // ==========================================
+        const arrowLength = 25;
+        const colorB = 0x3498db; 
+        const colorI = 0xf1c40f; 
+        const colorF = 0xe74c3c; 
+
+        const dirB = new THREE.Vector3(1, 0, 0);
+        const arrowBA = new THREE.ArrowHelper(dirB, new THREE.Vector3(), arrowLength, colorB, 6, 4);
+        const arrowBB = new THREE.ArrowHelper(dirB, new THREE.Vector3(), arrowLength, colorB, 6, 4);
+        scene.add(arrowBA); scene.add(arrowBB);
+
+        const arrowIA = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), arrowLength, colorI, 6, 4);
+        const arrowIB = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), arrowLength, colorI, 6, 4);
+        scene.add(arrowIA); scene.add(arrowIB);
+
+        const arrowFA = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), arrowLength + 10, colorF, 8, 5);
+        const arrowFB = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), arrowLength + 10, colorF, 8, 5);
+        scene.add(arrowFA); scene.add(arrowFB);
+
+        // ==========================================
+        // 動畫與物理更新邏輯
+        // ==========================================
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValDisp = document.getElementById('speedVal');
+        const toggleComm = document.getElementById('toggleComm');
+        const cbToggleB = document.getElementById('toggleB');
+        const cbToggleI = document.getElementById('toggleI');
+        const cbToggleF = document.getElementById('toggleF');
+
+        let voltageLevel = 0.8;
+
+        speedSlider.addEventListener('input', (e) => {
+            voltageLevel = parseInt(e.target.value) / 100;
+            speedValDisp.textContent = e.target.value + '%';
+        });
+
+        function updatePhysicsAndArrows() {
+            let hasCommutator = toggleComm.checked;
+            
+            // 視覺切換環
+            splitRingGroup.visible = hasCommutator;
+            slipRingGroup.visible = !hasCommutator;
+
+            // 切換顯示狀態
+            arrowBA.visible = arrowBB.visible = cbToggleB.checked;
+            arrowIA.visible = arrowIB.visible = cbToggleI.checked;
+            arrowFA.visible = arrowFB.visible = cbToggleF.checked;
+
+            const posA = new THREE.Vector3();
+            wireA.getWorldPosition(posA);
+            const posB = new THREE.Vector3();
+            wireB.getWorldPosition(posB);
+
+            arrowBA.position.copy(posA);
+            arrowBB.position.copy(posB);
+            arrowIA.position.copy(posA);
+            arrowIB.position.copy(posB);
+            arrowFA.position.copy(posA);
+            arrowFB.position.copy(posB);
+
+            // --- 核心動力學計算 ---
+            let cosTheta = Math.cos(rotorGroup.rotation.z);
+            
+            // 決定電流方向
+            // 若有換向器：電流永遠依賴空間位置 (X大於0向-Z，X小於0向+Z)
+            // 若無換向器：電流綁死在導線 A 上 (假設A永遠向-Z，B永遠向+Z)
+            let currentDirA = hasCommutator ? (cosTheta > 0 ? -1 : 1) : -1;
+            let currentDirB = -currentDirA;
+
+            arrowIA.setDirection(new THREE.Vector3(0, 0, currentDirA));
+            arrowIB.setDirection(new THREE.Vector3(0, 0, currentDirB));
+
+            // 計算勞侖茲力 (F = I x B) -> (0, 0, currentDir) x (1, 0, 0) = (0, currentDir, 0)
+            arrowFA.setDirection(new THREE.Vector3(0, currentDirA, 0));
+            arrowFB.setDirection(new THREE.Vector3(0, currentDirB, 0));
+            
+            // 力的大小恆定，但在無換向器斷電瞬間(極小區間)隱藏
+            let hideCurrent = hasCommutator && Math.abs(cosTheta) < 0.05;
+            if (hideCurrent) {
+                arrowIA.visible = arrowIB.visible = false;
+                arrowFA.visible = arrowFB.visible = false;
+            }
+
+            // 計算轉矩 (Torque = Force * Distance)
+            // 轉矩 = 垂直力(Y) * 水平距離(X) = currentDirA * posA.x
+            // posA.x = R * cosTheta; 所以轉矩正比於 currentDirA * cosTheta
+            let rawTorque = currentDirA * cosTheta; 
+            
+            // 加入電壓係數
+            let torque = voltageLevel * 0.02 * rawTorque;
+            
+            // 加入摩擦阻尼
+            let damping = 0.03;
+            let alpha = torque - damping * omega;
+            
+            // 更新角速度與角度
+            omega += alpha;
+            
+            // 限制最高轉速避免視覺穿幫
+            if (omega > 0.25) omega = 0.25;
+            if (omega < -0.25) omega = -0.25;
+
+            rotorGroup.rotation.z += omega;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysicsAndArrows();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 啟動動畫
+        animate();
+    </script>
+</body>
+</html>
