@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>揚聲器 (喇叭) 3D 原理模擬器</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ecf0f1;
+        }
+        
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            background: rgba(30, 40, 50, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 10px 0;
+            color: #9b59b6;
+            text-shadow: 0 0 10px rgba(155, 89, 182, 0.5);
+        }
+
+        p.subtitle {
+            font-size: 13px;
+            color: #bdc3c7;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #9b59b6;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #ecf0f1;
+        }
+
+        .checkbox-group input {
+            margin-right: 10px;
+            cursor: pointer;
+            accent-color: #9b59b6;
+            width: 16px;
+            height: 16px;
+        }
+
+        .legend {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+
+        #info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(30, 40, 50, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 420px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #ecf0f1;
+            border-left: 4px solid #9b59b6;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .highlight { color: #f1c40f; font-weight: bold; }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            transition: opacity 0.5s;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">載入 3D 引擎中...</div>
+    <div id="canvas-container"></div>
+
+    <div id="ui-container">
+        <h1>揚聲器 3D 原理模擬</h1>
+        <p class="subtitle">滑鼠左鍵拖曳旋轉視角，滾輪縮放。</p>
+
+        <div class="control-group">
+            <label for="freqSlider">
+                <span>交流電頻率 (音調高低):</span>
+                <span id="freqVal">5 Hz</span>
+            </label>
+            <input type="range" id="freqSlider" min="1" max="20" value="5">
+        </div>
+
+        <div class="control-group" style="padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <label for="ampSlider">
+                <span>交流電電流 (音量大小):</span>
+                <span id="ampVal">100%</span>
+            </label>
+            <input type="range" id="ampSlider" min="0" max="100" value="100">
+        </div>
+
+        <div class="control-group" style="margin-top: 15px;">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">物理向量視覺化：</div>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleB" checked> 顯示輻射磁場 (B)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleI" checked> 顯示環形電流 (I)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleF" checked> 顯示勞侖茲力 (F)
+            </label>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="color-box" style="background: #3498db;"></div> 磁場 B (中央 N 極向外輻射)</div>
+            <div class="legend-item"><div class="color-box" style="background: #f1c40f;"></div> 交流電流 I (隨時間正負交替)</div>
+            <div class="legend-item"><div class="color-box" style="background: #e74c3c;"></div> 勞侖茲力 F (帶動紙盆上下振動)</div>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        <strong>💡 揚聲器 (喇叭) 的發聲原理：</strong><br><br>
+        1. <strong>環形磁場：</strong> 底部的永久磁鐵設計成中央為 N 極，外圍為 S 極，在磁隙中形成<span class="highlight">水平向外的輻射狀磁場 (B)</span>。<br>
+        2. <strong>交流電輸入：</strong> 音頻訊號是一種交流電。當它流經懸浮在磁隙中的音圈時，會產生<span class="highlight">環形電流 (I)</span>。<br>
+        3. <strong>電磁力推動：</strong> 根據佛萊明左手定則，環形電流與輻射磁場垂直，產生<span class="highlight">沿著垂直方向的勞侖茲力 (F)</span>。電流反向，受力也反向，帶動連接的紙盆快速上下振動，推動空氣發出聲音！
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- 初始化 Three.js 場景 ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#121212'); 
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(0, 150, 250); // 稍微俯視的角度
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        // 限制視角避免跑到模型下方太多
+        controls.maxPolarAngle = Math.PI / 2 + 0.2;
+
+        document.getElementById('loading').style.opacity = '0';
+        setTimeout(() => document.getElementById('loading').remove(), 500);
+
+        // --- 燈光設定 ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 200, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0x9b59b6, 0.3); // 帶點紫色的補光
+        fillLight.position.set(-100, 50, -100);
+        scene.add(fillLight);
+
+        // --- 材質設定 ---
+        const matNorth = new THREE.MeshStandardMaterial({ color: '#e74c3c', metalness: 0.6, roughness: 0.3 }); // 中心 N 極
+        const matSouth = new THREE.MeshStandardMaterial({ color: '#2980b9', metalness: 0.6, roughness: 0.3 }); // 外圈 S 極
+        const matIron = new THREE.MeshStandardMaterial({ color: '#7f8c8d', metalness: 0.8, roughness: 0.2 }); // 導磁鐵件
+        const matCoil = new THREE.MeshStandardMaterial({ color: '#d35400', metalness: 0.5, roughness: 0.6 }); // 銅線音圈
+        const matCone = new THREE.MeshStandardMaterial({ 
+            color: '#34495e', 
+            metalness: 0.2, 
+            roughness: 0.8,
+            side: THREE.DoubleSide // 雙面渲染紙盆
+        }); 
+
+        // ==========================================
+        // 1. 建立固定部件：永久磁鐵系統 (Magnetic Motor Structure)
+        // ==========================================
+        const magnetGroup = new THREE.Group();
+        scene.add(magnetGroup);
+
+        // 中心磁極 (N極)
+        const centerPoleRadius = 20;
+        const centerPoleHeight = 40;
+        const centerPole = new THREE.Mesh(
+            new THREE.CylinderGeometry(centerPoleRadius, centerPoleRadius, centerPoleHeight, 32),
+            matNorth
+        );
+        centerPole.position.y = centerPoleHeight / 2;
+        centerPole.castShadow = true;
+        magnetGroup.add(centerPole);
+
+        // 底部導磁鐵板 (Back plate)
+        const backPlate = new THREE.Mesh(
+            new THREE.CylinderGeometry(45, 45, 10, 32),
+            matIron
+        );
+        backPlate.position.y = 5;
+        magnetGroup.add(backPlate);
+
+        // 外圈環形磁鐵 (S極) 
+        // 使用 Shape + Extrude 來製作空心圓環
+        const ringShape = new THREE.Shape();
+        ringShape.absarc(0, 0, 45, 0, Math.PI * 2, false);
+        const holePath = new THREE.Path();
+        holePath.absarc(0, 0, 25, 0, Math.PI * 2, true);
+        ringShape.holes.push(holePath);
+
+        const extrudeSettings = { depth: 30, bevelEnabled: false, curveSegments: 32 };
+        const ringGeo = new THREE.ExtrudeGeometry(ringShape, extrudeSettings);
+        ringGeo.rotateX(Math.PI / 2); // 轉平
+        const outerRing = new THREE.Mesh(ringGeo, matSouth);
+        outerRing.position.y = 40; // 頂部與 N 極平齊，形成磁隙 (Magnetic Gap)
+        outerRing.castShadow = true;
+        magnetGroup.add(outerRing);
+
+        // ==========================================
+        // 2. 建立可動部件：音圈與振膜 (Moving Assembly)
+        // ==========================================
+        const movingGroup = new THREE.Group();
+        // 初始高度，讓音圈剛好位於磁隙中間
+        movingGroup.position.y = 35;
+        scene.add(movingGroup);
+
+        // 音圈骨架 (Voice Coil Former)
+        const coilRadius = 22; // 介於 20(N極) 和 25(S極) 之間
+        const coilHeight = 25;
+        const former = new THREE.Mesh(
+            new THREE.CylinderGeometry(coilRadius, coilRadius, coilHeight, 32, 1, true), // 空心圓管
+            new THREE.MeshStandardMaterial({ color: '#bdc3c7', side: THREE.DoubleSide })
+        );
+        movingGroup.add(former);
+
+        // 音圈繞線 (Copper Windings) - 畫在骨架下半部
+        const winding = new THREE.Mesh(
+            new THREE.CylinderGeometry(coilRadius + 0.5, coilRadius + 0.5, 12, 32, 1, true),
+            matCoil
+        );
+        winding.position.y = -5;
+        movingGroup.add(winding);
+
+        // 振膜 / 紙盆 (Cone)
+        const coneTopRadius = 80;
+        const coneHeight = 40;
+        const cone = new THREE.Mesh(
+            new THREE.CylinderGeometry(coneTopRadius, coilRadius, coneHeight, 32, 1, true), // 空心圓台
+            matCone
+        );
+        cone.position.y = coneHeight / 2 + coilHeight / 2;
+        cone.castShadow = true;
+        movingGroup.add(cone);
+
+        // 防塵蓋 (Dust Cap)
+        const dustCap = new THREE.Mesh(
+            new THREE.SphereGeometry(coilRadius + 2, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+            matCone
+        );
+        dustCap.position.y = coilHeight / 2;
+        movingGroup.add(dustCap);
+
+        // ==========================================
+        // 3. 建立聲波視覺化 (Sound Waves)
+        // ==========================================
+        const waves = [];
+        const numWaves = 4;
+        for(let i=0; i<numWaves; i++) {
+            const wave = new THREE.Mesh(
+                new THREE.TorusGeometry(coneTopRadius, 1.5, 8, 64),
+                new THREE.MeshBasicMaterial({ color: 0x9b59b6, transparent: true, opacity: 0 })
+            );
+            wave.rotation.x = Math.PI / 2;
+            wave.position.y = movingGroup.position.y + coneHeight + 10;
+            scene.add(wave);
+            waves.push({ mesh: wave, phase: i * (Math.PI * 2 / numWaves) });
+        }
+
+        // ==========================================
+        // 4. 建立物理向量箭頭 (Helpers)
+        // ==========================================
+        const arrowLength = 20;
+        const colorB = 0x3498db; // 藍色 (輻射磁場)
+        const colorI = 0xf1c40f; // 黃色 (環形電流)
+        const colorF = 0xe74c3c; // 紅色 (勞侖茲力)
+
+        // 我們在音圈的 4 個方向 (前、後、左、右) 畫出向量
+        const arrowsData = [
+            { angle: 0,             dirB: new THREE.Vector3(1, 0, 0),  dirI_pos: new THREE.Vector3(0, 0, 1) }, // 右側
+            { angle: Math.PI / 2,   dirB: new THREE.Vector3(0, 0, 1),  dirI_pos: new THREE.Vector3(-1, 0, 0) }, // 前側
+            { angle: Math.PI,       dirB: new THREE.Vector3(-1, 0, 0), dirI_pos: new THREE.Vector3(0, 0, -1) }, // 左側
+            { angle: Math.PI * 1.5, dirB: new THREE.Vector3(0, 0, -1), dirI_pos: new THREE.Vector3(1, 0, 0) } // 後側
+        ];
+
+        const arrowsB = [];
+        const arrowsI = [];
+        const arrowsF = [];
+
+        arrowsData.forEach(data => {
+            // 起點位於音圈線圈部分
+            const origin = new THREE.Vector3(
+                Math.cos(data.angle) * (coilRadius + 2),
+                winding.position.y,
+                Math.sin(data.angle) * (coilRadius + 2)
+            );
+
+            // B 磁場箭頭 (永遠從中央向外輻射)
+            const arrowB = new THREE.ArrowHelper(data.dirB, origin, arrowLength, colorB, 5, 3);
+            movingGroup.add(arrowB); // 附加在 movingGroup 上一起震動
+            arrowsB.push(arrowB);
+
+            // I 電流箭頭 (沿著切線方向，會隨時間正負交替)
+            const arrowI = new THREE.ArrowHelper(data.dirI_pos, origin, arrowLength, colorI, 5, 3);
+            movingGroup.add(arrowI);
+            arrowsI.push({ helper: arrowI, baseDir: data.dirI_pos });
+
+            // F 受力箭頭 (永遠在垂直 Y 軸，會隨電流方向上下反轉)
+            // F = I x B
+            const arrowF = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), origin, arrowLength, colorF, 6, 4);
+            movingGroup.add(arrowF);
+            arrowsF.push(arrowF);
+        });
+
+        // ==========================================
+        // 動畫與物理更新邏輯
+        // ==========================================
+        const freqSlider = document.getElementById('freqSlider');
+        const freqValDisp = document.getElementById('freqVal');
+        const ampSlider = document.getElementById('ampSlider');
+        const ampValDisp = document.getElementById('ampVal');
+        const cbToggleB = document.getElementById('toggleB');
+        const cbToggleI = document.getElementById('toggleI');
+        const cbToggleF = document.getElementById('toggleF');
+
+        let frequency = 5; // 交流電頻率
+        let amplitude = 1.0; // 電流大小 (振幅)
+        let time = 0;
+        const baseY = 35; // 音圈靜止時的高度
+
+        freqSlider.addEventListener('input', (e) => {
+            frequency = parseInt(e.target.value);
+            freqValDisp.textContent = frequency + ' Hz';
+        });
+
+        ampSlider.addEventListener('input', (e) => {
+            amplitude = parseInt(e.target.value) / 100;
+            ampValDisp.textContent = e.target.value + '%';
+        });
+
+        function updatePhysicsAndArrows() {
+            time += 0.016; // 大約 60fps 的步長
+
+            // 1. 生成交流電訊號 (Sine Wave)
+            // 電流隨時間變化： I(t) = A * sin(2 * pi * f * t)
+            const current = amplitude * Math.sin(2 * Math.PI * (frequency / 10) * time);
+
+            // 2. 更新音圈與紙盆的位置
+            // 受到的勞侖茲力推動音圈，位移與電流成正比 (簡化物理模型)
+            const maxDisplacement = 12; // 最大上下位移幅度
+            movingGroup.position.y = baseY + current * maxDisplacement;
+
+            // 3. 更新聲波動畫 (視覺效果)
+            // 聲波向外、向上擴散
+            const waveSpeed = 2 + (frequency * 0.2);
+            waves.forEach(w => {
+                // 如果電流振幅很小，聲波就變淡
+                if (amplitude < 0.1) {
+                    w.mesh.material.opacity = 0;
+                    return;
+                }
+
+                w.phase += 0.05 * waveSpeed;
+                // 利用 mod 讓波圈不斷循環放大
+                const progress = (w.phase % (Math.PI * 2)) / (Math.PI * 2);
+                
+                // 放大半徑與高度
+                w.mesh.scale.setScalar(1 + progress * 1.5);
+                w.mesh.position.y = baseY + coneHeight + 10 + (progress * 50);
+                
+                // 漸隱效果
+                w.mesh.material.opacity = (1 - progress) * 0.6 * amplitude;
+            });
+
+            // 4. 更新物理向量箭頭
+            const showB = cbToggleB.checked;
+            const showI = cbToggleI.checked;
+            const showF = cbToggleF.checked;
+
+            for(let i=0; i<4; i++) {
+                // 顯示/隱藏
+                arrowsB[i].visible = showB;
+                arrowsI[i].helper.visible = showI && (Math.abs(current) > 0.05);
+                arrowsF[i].visible = showF && (Math.abs(current) > 0.05);
+
+                if (Math.abs(current) > 0.05) {
+                    // 更新電流方向與長度
+                    const dirI = arrowsI[i].baseDir.clone();
+                    if (current < 0) dirI.negate(); // 電流為負時，反向
+                    arrowsI[i].helper.setDirection(dirI);
+                    arrowsI[i].helper.setLength(arrowLength * Math.abs(current) + 5, 5, 3);
+
+                    // 更新受力方向與長度 (F = I x B)
+                    // 若 I 反向，F 就反向
+                    const dirF = new THREE.Vector3(0, current > 0 ? 1 : -1, 0);
+                    arrowsF[i].setDirection(dirF);
+                    arrowsF[i].setLength(arrowLength * Math.abs(current) + 5, 6, 4);
+                }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysicsAndArrows();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 啟動動畫
+        animate();
+    </script>
+</body>
+</html>
