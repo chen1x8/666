@@ -97,6 +97,7 @@
             font-size: 15px;
             cursor: pointer;
             margin-top: 5px;
+            transition: all 0.2s;
         }
         .btn-reset:hover { background-color: #2980b9; }
 
@@ -160,10 +161,11 @@
             </div>
 
             <div class="control-panel">
-                <button id="btn-zero-force" class="btn-zero-force">⚡ 让所有力瞬间消失！</button>
+                <button id="btn-zero-force" class="btn-zero-force">⚡ 立即让所有力瞬间消失！</button>
+                <button id="btn-auto-peak" class="btn-reset" style="background-color: #27ae60; margin-top: 10px; font-weight: bold;">🎯 预约：运动至最高点自动失重</button>
                 <button id="btn-break-string" class="btn-zero-force" style="background-color: #9b59b6; margin-top: 10px; display: none; font-size: 15px;">✂️ 剪断摆绳 (保留重力)</button>
                 <button id="btn-slow-mo" class="btn-reset" style="background-color: #f39c12; margin-top: 10px;">⏳ 慢动作模式 (0.1x)</button>
-                <button id="btn-reset" class="btn-reset">🔄 重置当前场景</button>
+                <button id="btn-reset" class="btn-reset" style="margin-top: 10px;">🔄 重置当前场景</button>
             </div>
 
             <div class="control-panel" style="padding: 12px;">
@@ -185,7 +187,8 @@
         无论小球处于何种复杂的变速运动中，只要在按下「瞬间消失」的瞬间，外力合力归零，它都将严格遵守牛顿第一定律：<br>
         1. <strong>斜抛运动：</strong> 在抛物线轨迹的任何瞬间消除重力，小球将沿着那一瞬间的速度方向（切线方向）做完美的等速直線運動。<br>
         2. <strong>单摆与断绳：</strong> 在单摆运动中，如果您选择「✂️ 剪断摆绳」，小球会失去拉力但<strong>保留重力</strong>，它将顺着切线飞出，然后做平抛或斜抛运动掉落地面；若此时再按下「瞬间失重」，它将再次变为等速直線運動！<br>
-        3. <strong>弧形斜面：</strong> 小球从左侧高点滑下，在右侧离开斜面时会进行一段<strong>斜抛飞跃</strong>。您可以在它滑行、或腾空飞行的任意瞬间点击失重，观察它沿切线飞出的奇妙现象。
+        3. <strong>弧形斜面：</strong> 小球从左侧高点滑下，在右侧离开斜面时会进行一段<strong>斜抛飞跃</strong>。您可以在它滑行、或腾空飞行的任意瞬间点击失重，观察它沿切线飞出的奇妙现象。<br>
+        ✨ <strong>最新功能：</strong> 觉得手动抓不准最高点的时机？点击「🎯 预约自动失重」，系统会在小球到达最高点的绝对瞬间，精确地将竖直速度归零并消除所有外力，完美定格物理现象！
     </div>
 
 <script>
@@ -199,6 +202,7 @@
     const btnBreakString = document.getElementById('btn-break-string');
     const btnReset = document.getElementById('btn-reset');
     const btnSlowMo = document.getElementById('btn-slow-mo');
+    const btnAutoPeak = document.getElementById('btn-auto-peak');
     
     const vxValDisp = document.getElementById('vxVal');
     const vyValDisp = document.getElementById('vyVal');
@@ -213,6 +217,7 @@
     let forcesZeroed = false;
     let stringBroken = false;
     let isSlowMo = false;
+    let autoZeroAtPeak = false; // 预约最高点标志
     let trail = []; // 轨迹点
     let trailTimer = 0; // 控制慢动作下的轨迹点生成频率
 
@@ -228,23 +233,49 @@
     let pend = { pivotX: 300, pivotY: 50, L: 250, theta: Math.PI/3, omega: 0 };
     let incline = { cx: 180, cy: 180, R: 150, startTheta: Math.PI, endTheta: Math.PI/6, theta: Math.PI, v_t: 0, inAir: false };
 
+    // --- 提取触发失重的逻辑以供重用 ---
+    function triggerZeroForce() {
+        if (!forcesZeroed) {
+            forcesZeroed = true;
+            btnZeroForce.classList.add('zeroed');
+            btnZeroForce.textContent = "🌌 已处于失重/无外力状态！";
+            btnZeroForce.disabled = true;
+            
+            btnBreakString.disabled = true; // 失重后不允许再剪绳子
+            btnAutoPeak.disabled = true;
+            btnAutoPeak.style.opacity = 0.5;
+            
+            forceStatusDisp.textContent = "无外力作用 (遵循惯性定律)";
+            forceStatusDisp.style.color = "#e74c3c";
+
+            if (currentMode === 'pendulum' && !stringBroken) {
+                updatePendulumPosition(); 
+            }
+        }
+    }
+
     // --- 初始化场景 ---
     function initScene(mode) {
         currentMode = mode;
         forcesZeroed = false;
         stringBroken = false;
+        autoZeroAtPeak = false;
         trail = [];
         trailTimer = 0;
         
         btnZeroForce.classList.remove('zeroed');
-        btnZeroForce.textContent = "⚡ 让所有力瞬间消失！";
+        btnZeroForce.textContent = "⚡ 立即让所有力瞬间消失！";
         btnZeroForce.disabled = false;
 
         btnBreakString.classList.remove('zeroed');
         btnBreakString.textContent = "✂️ 剪断摆绳 (保留重力)";
         btnBreakString.disabled = false;
-        // 仅在单摆模式下显示剪断绳子按钮
         btnBreakString.style.display = (mode === 'pendulum') ? "block" : "none";
+
+        btnAutoPeak.textContent = "🎯 预约：运动至最高点自动失重";
+        btnAutoPeak.style.backgroundColor = "#27ae60";
+        btnAutoPeak.disabled = false;
+        btnAutoPeak.style.opacity = 1;
         
         forceStatusDisp.textContent = "受力中 (重力等正常作用)";
         forceStatusDisp.style.color = "#27ae60";
@@ -325,26 +356,28 @@
     });
 
     btnZeroForce.addEventListener('click', () => {
-        if (!forcesZeroed) {
-            forcesZeroed = true;
-            btnZeroForce.classList.add('zeroed');
-            btnZeroForce.textContent = "🌌 已处于失重/无外力状态！";
-            btnZeroForce.disabled = true;
-            
-            btnBreakString.disabled = true; // 失重后不允许再剪绳子
-            
-            forceStatusDisp.textContent = "无外力作用 (遵循惯性定律)";
-            forceStatusDisp.style.color = "#e74c3c";
+        triggerZeroForce();
+    });
 
-            if (currentMode === 'pendulum' && !stringBroken) {
-                updatePendulumPosition(); 
-            }
+    btnAutoPeak.addEventListener('click', () => {
+        if (forcesZeroed) return;
+        autoZeroAtPeak = !autoZeroAtPeak;
+        if (autoZeroAtPeak) {
+            btnAutoPeak.textContent = "🔄 已预约：等待到达最高点...";
+            btnAutoPeak.style.backgroundColor = "#e67e22";
+        } else {
+            btnAutoPeak.textContent = "🎯 预约：运动至最高点自动失重";
+            btnAutoPeak.style.backgroundColor = "#27ae60";
         }
     });
 
     // --- 核心物理引擎 ---
     function updatePhysics() {
         let dt = isSlowMo ? 0.1 : 1.0;
+
+        // 记录更新前的速度，用于比对以抓取最高点
+        let prevVy = ball.vy;
+        let prevOmega = pend.omega;
 
         trailTimer += dt;
         if (trailTimer >= 1) {
@@ -429,6 +462,44 @@
                     if (ball.x > canvas.width) {
                         initScene('incline');
                     }
+                }
+            }
+
+            // ======== 最高点检测自动触发失重 ========
+            if (autoZeroAtPeak) {
+                let reachedPeak = false;
+
+                // 判断标准重力抛体运动（竖直、斜抛、脱离斜面、断绳）
+                if (currentMode === 'vertical' || currentMode === 'oblique' || (currentMode === 'pendulum' && stringBroken) || (currentMode === 'incline' && incline.inAir)) {
+                    // 如果上一帧竖直速度向上(负值)，这一帧转为向下(正值)或0，说明恰好过最高点
+                    if (prevVy < 0 && ball.vy >= 0) {
+                        reachedPeak = true;
+                    }
+                } 
+                // 判断正常单摆运动
+                else if (currentMode === 'pendulum' && !stringBroken) {
+                    // 角速度方向改变即到达最高点 (利用乘积为负)
+                    if (prevOmega * pend.omega < 0) {
+                        reachedPeak = true;
+                    }
+                }
+
+                if (reachedPeak) {
+                    // 精确锁定最高点物理状态：将相关向心或向下的速度完美归零！
+                    if (currentMode === 'vertical' || currentMode === 'oblique' || (currentMode === 'pendulum' && stringBroken) || (currentMode === 'incline' && incline.inAir)) {
+                        ball.vy = 0;
+                    } else if (currentMode === 'pendulum' && !stringBroken) {
+                        pend.omega = 0;
+                        updatePendulumPosition();
+                    }
+
+                    // 触发失重
+                    triggerZeroForce();
+                    
+                    // 更新按钮状态
+                    autoZeroAtPeak = false;
+                    btnAutoPeak.textContent = "🎯 预约：运动至最高点自动失重";
+                    btnAutoPeak.style.backgroundColor = "#27ae60";
                 }
             }
         }
