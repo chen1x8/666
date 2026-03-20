@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D 纯滚动与摆线运动学</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ecf0f1;
+        }
+        
+        canvas {
+            display: block;
+            background-color: #121212;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            background: rgba(30, 40, 50, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 10px 0;
+            color: #2ecc71;
+            text-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+        }
+
+        p.subtitle {
+            font-size: 13px;
+            color: #bdc3c7;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #2ecc71;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .radio-btn {
+            flex: 1;
+            padding: 10px;
+            background: #2c3e50;
+            border: 2px solid #34495e;
+            color: white;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .radio-btn.active {
+            background: #27ae60;
+            border-color: #2ecc71;
+        }
+
+        .btn-toggle {
+            width: 100%;
+            padding: 12px;
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .btn-toggle:hover { background-color: #d35400; }
+        .btn-toggle.paused { background-color: #27ae60; }
+        .btn-toggle.paused:hover { background-color: #2ecc71; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #ecf0f1;
+        }
+
+        .checkbox-group input {
+            margin-right: 10px;
+            cursor: pointer;
+            accent-color: #3498db;
+            width: 16px;
+            height: 16px;
+        }
+
+        .legend {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(20, 25, 30, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            border: 1px solid #34495e;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(30, 40, 50, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 460px;
+            font-size: 13.5px;
+            line-height: 1.6;
+            color: #ecf0f1;
+            border-left: 4px solid #2ecc71;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .highlight { color: #f1c40f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <canvas id="simCanvas"></canvas>
+
+    <div id="hud">
+        <div style="color: #bdc3c7; margin-bottom: 5px; font-weight: bold;">🔴 表面红点实时速度</div>
+        <div>V_平动 = <span id="vTransStr" style="color: #3498db;">0.00</span></div>
+        <div>V_转动 = <span id="vRotStr" style="color: #f1c40f;">0.00</span></div>
+        <hr style="border-color: #34495e; margin: 8px 0;">
+        <div style="font-size: 16px; font-weight: bold;">V_合速度 = <span id="vTotalStr" style="color: #e74c3c;">0.00</span></div>
+    </div>
+
+    <div id="ui-container">
+        <h1>2D 纯滚动与摆线运动学</h1>
+        <p class="subtitle">清晰展示平动与转动的完美叠加。</p>
+
+        <div class="radio-group" id="modeSelector">
+            <div class="radio-btn active" data-mode="rolling">纯滚动 (无滑动)</div>
+            <div class="radio-btn" data-mode="spinning">原地转动</div>
+        </div>
+
+        <button id="btnPlayPause" class="btn-toggle">⏸️ 暂停运动</button>
+
+        <div class="control-group" style="margin-top: 20px;">
+            <label for="speedSlider">
+                <span>滚动速度 (V):</span>
+                <span id="speedVal">100 px/s</span>
+            </label>
+            <input type="range" id="speedSlider" min="10" max="250" value="100">
+        </div>
+
+        <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">向量与轨迹显示：</div>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleTrans" checked> 顯示平动速度 (V_trans)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleRot" checked> 顯示转动速度 (V_rot)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="toggleTotal" checked> <span style="font-weight:bold; color:#e74c3c;">顯示合速度 (V_total)</span>
+            </label>
+            <label class="checkbox-group" style="margin-top: 10px;">
+                <input type="checkbox" id="toggleTrail" checked> 顯示摆线轨迹 (Cycloid)
+            </label>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="color-box" style="background: #3498db;"></div> 平动速度 (恒指向右)</div>
+            <div class="legend-item"><div class="color-box" style="background: #f1c40f;"></div> 转动速度 (沿圆周切线)</div>
+            <div class="legend-item"><div class="color-box" style="background: #e74c3c;"></div> 合速度 (对地真实速度)</div>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        <strong>💡 运动学解析：合速度 = 平动 + 转动</strong><br><br>
+        🌍 <strong>纯滚动 (Rolling)：</strong><br>
+        1. <span class="highlight">接触点 (最低点)：</span> 转动速度向后，平动速度向前，完美抵消！瞬间对地速度 <strong>绝对为 0</strong>。<br>
+        2. <span class="highlight">最高点：</span> 转动方向与平动方向完全一致，合速度达到最大，为质心速度的 <strong>2 倍</strong>！<br>
+        3. <span class="highlight">摆线 (Cycloid)：</span> 红点在纯滚动过程中划出的优美弧线。试着在接触点或最高点“暂停”，观察三个向量构成的平行四边形定则。<br><br>
+        🔄 <strong>原地转动 (Spinning)：</strong> 没有平动速度，球心静止。表面任意一点的速度完全取决于转动速度向量，轨迹为完美的圆形。
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Elements
+        const btnPlayPause = document.getElementById('btnPlayPause');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValDisp = document.getElementById('speedVal');
+        
+        const cbTrans = document.getElementById('toggleTrans');
+        const cbRot = document.getElementById('toggleRot');
+        const cbTotal = document.getElementById('toggleTotal');
+        const cbTrail = document.getElementById('toggleTrail');
+
+        const hudTrans = document.getElementById('vTransStr');
+        const hudRot = document.getElementById('vRotStr');
+        const hudTotal = document.getElementById('vTotalStr');
+
+        // --- 物理與幾何狀態 ---
+        let mode = 'rolling'; // 'rolling' or 'spinning'
+        let isPaused = false;
+        let R = 80; // 圓半徑
+        let v_base = 100; // 質心平動速度 (px/s)
+        let x_c = -R; // 質心 X 座標
+        let y_c = 0; // 質心 Y 座標 (在 resize 時計算)
+        let phi = 0; // 轉動角度 (純滾動時 phi = x_c / R)
+        
+        let trail = []; // 儲存擺線軌跡點
+
+        // 調整畫布大小
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            y_c = canvas.height - 100 - R; // 地面設定在距離底部 100px 處
+            
+            if (mode === 'spinning') {
+                x_c = canvas.width / 2;
+                trail = []; // 原地轉動時清除軌跡重新畫
+            } else {
+                // 如果軌跡超出畫面，重新計算軌跡 (避免視窗縮放導致軌跡錯位)
+                recalculateTrail();
+            }
+        }
+        window.addEventListener('resize', resize);
+        
+        // 根據當前 phi 重算過去的軌跡 (為了美觀)
+        function recalculateTrail() {
+            trail = [];
+            // 生成從屏幕左側一直到當前 x_c 的軌跡
+            for(let temp_x = -R; temp_x <= x_c; temp_x += 2) {
+                let temp_phi = (temp_x - (-R)) / R;
+                let theta = Math.PI / 2 + temp_phi; 
+                trail.push({
+                    x: temp_x + R * Math.cos(theta),
+                    y: y_c + R * Math.sin(theta)
+                });
+            }
+        }
+
+        // --- 繪圖輔助函數 ---
+        function drawArrow(ctx, fromX, fromY, toX, toY, color, lineWidth = 3) {
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return; // 向量為 0 則不畫
+
+            const headlen = 12; 
+            const angle = Math.atan2(dy, dx);
+            
+            ctx.beginPath();
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+        }
+
+        // --- 事件綁定 ---
+        document.querySelectorAll('.radio-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                mode = e.target.dataset.mode;
+                
+                // 重置狀態
+                if (mode === 'spinning') {
+                    x_c = canvas.width / 2; // 置中
+                } else {
+                    x_c = -R; // 從左側開始
+                }
+                phi = 0;
+                trail = [];
+                if (mode === 'rolling') recalculateTrail();
+            });
+        });
+
+        btnPlayPause.addEventListener('click', () => {
+            isPaused = !isPaused;
+            if (isPaused) {
+                btnPlayPause.textContent = "▶️ 继续运动";
+                btnPlayPause.classList.add('paused');
+            } else {
+                btnPlayPause.textContent = "⏸️ 暂停运动";
+                btnPlayPause.classList.remove('paused');
+                lastTime = performance.now(); // 重置時間差
+            }
+        });
+
+        speedSlider.addEventListener('input', (e) => {
+            v_base = parseInt(e.target.value);
+            speedValDisp.textContent = v_base + " px/s";
+        });
+
+        // --- 主循環 ---
+        let lastTime = performance.now();
+
+        function render(currentTime) {
+            requestAnimationFrame(render);
+            
+            let dt = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            // 如果暫停，dt 設為 0
+            if (isPaused) dt = 0;
+            
+            // 安全限制 dt，避免切換分頁回來時發生瞬移
+            if (dt > 0.1) dt = 0.1;
+
+            // 1. 更新物理狀態
+            if (!isPaused) {
+                let dx = v_base * dt;
+                
+                if (mode === 'rolling') {
+                    x_c += dx;
+                    phi += dx / R; // 純滾動角速度 ω = v/R，所以 d(phi) = dx/R
+                } else {
+                    phi += dx / R; // 原地轉動僅有角速度
+                }
+                
+                // 計算當前紅點 P 的坐標
+                let theta = Math.PI / 2 + phi; // 初始在正下方 (PI/2)，順時針轉動 (Canvas 中 +phi)
+                let x_p = x_c + R * Math.cos(theta);
+                let y_p = y_c + R * Math.sin(theta);
+                
+                // 記錄軌跡
+                trail.push({x: x_p, y: y_p});
+                // 原地轉動時限制軌跡點數量，避免陣列無限增長
+                if (mode === 'spinning' && trail.length > 250) {
+                    trail.shift();
+                }
+
+                // 邊界循環
+                if (mode === 'rolling' && x_c - R > canvas.width) {
+                    x_c = -R;
+                    phi = 0;
+                    trail = [];
+                }
+            }
+
+            // --- 開始繪製 ---
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 畫地面
+            let groundY = y_c + R;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.strokeStyle = '#7f8c8d';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            // 地面下方的斜線裝飾 (表示實體地面)
+            ctx.beginPath();
+            for(let i = 0; i < canvas.width; i += 30) {
+                ctx.moveTo(i, groundY);
+                ctx.lineTo(i - 15, groundY + 15);
+            }
+            ctx.strokeStyle = '#34495e';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 畫軌跡 (擺線)
+            if (cbTrail.checked && trail.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(trail[0].x, trail[0].y);
+                for (let i = 1; i < trail.length; i++) {
+                    ctx.lineTo(trail[i].x, trail[i].y);
+                }
+                ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; // 紅色半透明
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            // 畫大圓 (輪胎)
+            ctx.beginPath();
+            ctx.arc(x_c, y_c, R, 0, Math.PI * 2);
+            ctx.strokeStyle = '#bdc3c7';
+            ctx.lineWidth = 3;
+            // 給圓填充一點淡淡的顏色
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fill();
+            ctx.stroke();
+
+            // 計算紅點 P 目前的位置
+            let theta = Math.PI / 2 + phi;
+            let x_p = x_c + R * Math.cos(theta);
+            let y_p = y_c + R * Math.sin(theta);
+
+            // 畫輪輻 (圓心到紅點的連線，表現轉動)
+            ctx.beginPath();
+            ctx.moveTo(x_c, y_c);
+            ctx.lineTo(x_p, y_p);
+            ctx.strokeStyle = '#7f8c8d';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]); // 虛線
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 畫圓心 C
+            ctx.beginPath();
+            ctx.arc(x_c, y_c, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#bdc3c7';
+            ctx.fill();
+
+            // 畫紅點 P (表面觀察點)
+            ctx.beginPath();
+            ctx.arc(x_p, y_p, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#e74c3c';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // === 計算並畫出速度向量 ===
+            
+            // 向量顯示的縮放比例 (使得箭頭夠長夠明顯)
+            const V_SCALE = 1.0; 
+            
+            // 1. 平動速度 V_trans (永遠向右，僅在純滾動時存在)
+            let vx_trans = (mode === 'rolling') ? v_base : 0;
+            let vy_trans = 0;
+
+            // 2. 轉動速度 V_rot (沿切線)
+            // 轉速 magnitude = v_base (因為純滾動 w*R = v)
+            // 方向垂直於 CP 連線。在 Canvas 中 Y 向下，順時針轉動。
+            let vx_rot = -v_base * Math.sin(theta);
+            let vy_rot = v_base * Math.cos(theta);
+
+            // 3. 合速度 V_total
+            let vx_total = vx_trans + vx_rot;
+            let vy_total = vy_trans + vy_rot;
+
+            // 繪製箭頭
+            if (cbTrans.checked) {
+                drawArrow(ctx, x_p, y_p, x_p + vx_trans * V_SCALE, y_p + vy_trans * V_SCALE, '#3498db', 4);
+            }
+            if (cbRot.checked) {
+                drawArrow(ctx, x_p, y_p, x_p + vx_rot * V_SCALE, y_p + vy_rot * V_SCALE, '#f1c40f', 4);
+            }
+            if (cbTotal.checked) {
+                let vTotalMag = Math.sqrt(vx_total*vx_total + vy_total*vy_total);
+                if (vTotalMag > 1) { // 速度極小於 0 時不畫
+                    drawArrow(ctx, x_p, y_p, x_p + vx_total * V_SCALE, y_p + vy_total * V_SCALE, '#e74c3c', 5);
+                }
+            }
+
+            // === 更新 HUD ===
+            let magTrans = Math.sqrt(vx_trans*vx_trans + vy_trans*vy_trans);
+            let magRot = Math.sqrt(vx_rot*vx_rot + vy_rot*vy_rot);
+            let magTotal = Math.sqrt(vx_total*vx_total + vy_total*vy_total);
+
+            hudTrans.textContent = magTrans.toFixed(1);
+            hudRot.textContent = magRot.toFixed(1);
+            hudTotal.textContent = magTotal.toFixed(1);
+
+            // 特效：當紅點到底部瞬間 (速度接近0) 閃爍紅光
+            if (magTotal < 5) {
+                hudTotal.style.textShadow = "0 0 10px #e74c3c";
+                hudTotal.innerHTML = magTotal.toFixed(1) + " (瞬間静止!)";
+                
+                // 畫布上也給個提示圈
+                ctx.beginPath();
+                ctx.arc(x_p, y_p, 15 + Math.sin(performance.now()/50)*5, 0, Math.PI*2);
+                ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else {
+                hudTotal.style.textShadow = "none";
+            }
+        }
+
+        // 初始化
+        resize();
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>
