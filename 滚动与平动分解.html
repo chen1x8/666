@@ -166,14 +166,66 @@
             left: 20px;
             background: rgba(30, 40, 50, 0.85);
             padding: 15px;
+            padding-right: 35px; /* 為關閉按鈕留出空間 */
             border-radius: 8px;
             max-width: 460px;
             font-size: 13.5px;
             line-height: 1.6;
             color: #ecf0f1;
             border-left: 4px solid #2ecc71;
-            pointer-events: none;
+            pointer-events: auto; /* 允許點擊事件 */
             z-index: 10;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #info-panel.hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            color: #bdc3c7;
+            font-size: 16px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .close-btn:hover {
+            color: #e74c3c;
+        }
+
+        #btnShowInfo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(30, 40, 50, 0.85);
+            color: #ecf0f1;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border-left: 4px solid #2ecc71;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #btnShowInfo:hover {
+            background: rgba(40, 50, 60, 0.9);
+        }
+
+        #btnShowInfo.hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
         }
 
         .highlight { color: #f1c40f; font-weight: bold; }
@@ -233,7 +285,11 @@
         </div>
     </div>
 
+    <!-- 重新顯示說明的按鈕 (預設隱藏) -->
+    <button id="btnShowInfo" class="hidden" title="顯示運動學解析">💡 顯示說明</button>
+
     <div id="info-panel">
+        <button id="btnCloseInfo" class="close-btn" title="隱藏說明">✖</button>
         <strong>💡 运动学解析：合速度 = 平动 + 转动</strong><br><br>
         🌍 <strong>纯滚动 (Rolling)：</strong><br>
         1. <span class="highlight">接触点 (最低点)：</span> 转动速度向后，平动速度向前，完美抵消！瞬间对地速度 <strong>绝对为 0</strong>。<br>
@@ -259,6 +315,21 @@
         const hudTrans = document.getElementById('vTransStr');
         const hudRot = document.getElementById('vRotStr');
         const hudTotal = document.getElementById('vTotalStr');
+
+        const infoPanel = document.getElementById('info-panel');
+        const btnCloseInfo = document.getElementById('btnCloseInfo');
+        const btnShowInfo = document.getElementById('btnShowInfo');
+
+        // --- 隱藏/顯示說明面板事件 ---
+        btnCloseInfo.addEventListener('click', () => {
+            infoPanel.classList.add('hidden');
+            btnShowInfo.classList.remove('hidden');
+        });
+
+        btnShowInfo.addEventListener('click', () => {
+            infoPanel.classList.remove('hidden');
+            btnShowInfo.classList.add('hidden');
+        });
 
         // --- 物理與幾何狀態 ---
         let mode = 'rolling'; // 'rolling' or 'spinning'
