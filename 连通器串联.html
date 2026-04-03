@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>串联 U 形管压强计演示</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        p.desc {
+            color: #666;
+            margin-bottom: 20px;
+            max-width: 800px;
+            text-align: center;
+        }
+        .controls {
+            background: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        input[type="range"] {
+            width: 300px;
+            cursor: pointer;
+        }
+        canvas {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body>
+
+    <h2>串联 U 形管压强计交互演示</h2>
+    <p class="desc">
+        拖动滑块改变探头在液体中的深度，观察两个 U 形管中液面的变化。<br>
+        <strong>注意观察：</strong>中间密封的空气体积被压缩，导致 U 形管 1 的右侧上升高度<strong>大于</strong> U 形管 2 的左侧下降高度，最终 $h_1 > h_2$。
+    </p>
+
+    <div class="controls">
+        <label for="depthSlider">探头深度 (压强):</label>
+        <input type="range" id="depthSlider" min="0" max="100" value="0">
+        <span id="depthVal">0</span>
+    </div>
+
+    <canvas id="simCanvas" width="850" height="450"></canvas>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('depthSlider');
+        const depthValLabel = document.getElementById('depthVal');
+
+        // 基础参数
+        const TUBE_WIDTH = 20;
+        const BASE_Y = 250; // 初始液面高度
+        const BOTTOM_Y = 400; // U形管底部高度
+
+        function draw() {
+            // 获取滑块值 (代表深度/压强)
+            const val = parseInt(slider.value);
+            depthValLabel.textContent = val;
+
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ---------------- 物理模型计算 ----------------
+            // U形管 1：需要克服中间气体压强，液面差更大
+            // 左侧下降稍少，右侧上升较多（因为要挤压中间气体）
+            const u1_left_y = BASE_Y + val * 0.6;
+            const u1_right_y = BASE_Y - val * 0.8; 
+            const h1 = u1_left_y - u1_right_y;
+
+            // U形管 2：纯粹抵抗大气压
+            // 左侧下降和右侧上升高度一致
+            const u2_left_y = BASE_Y + val * 0.5;
+            const u2_right_y = BASE_Y - val * 0.5;
+            const h2 = u2_left_y - u2_right_y;
+
+            // ---------------- 绘制场景 ----------------
+
+            // 1. 绘制左侧大烧杯和液体
+            ctx.fillStyle = "rgba(0, 150, 255, 0.2)";
+            ctx.fillRect(40, 150, 160, 280);
+            ctx.strokeStyle = "#555";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(40, 100);
+            ctx.lineTo(40, 430);
+            ctx.lineTo(200, 430);
+            ctx.lineTo(200, 100);
+            ctx.stroke();
+
+            // 2. 绘制探头和连接管
+            const probeY = 150 + val * 2; // 探头深度联动
+            // 探头
+            ctx.fillStyle = "#ddd";
+            ctx.strokeStyle = "#333";
+            ctx.beginPath();
+            ctx.arc(120, probeY, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            // 探头橡皮膜 (底部)
+            ctx.beginPath();
+            ctx.arc(120, probeY, 20, 0, Math.PI);
+            ctx.fillStyle = "rgba(255, 0, 0, 0.4)";
+            ctx.fill();
+
+            // 探头连接到 U1 的橡胶管
+            ctx.strokeStyle = "#888";
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(120, probeY - 20);
+            ctx.lineTo(120, 80);
+            ctx.lineTo(310, 80);
+            ctx.lineTo(310, 120);
+            ctx.stroke();
+
+            // U1 连接到 U2 的中间橡胶管
+            ctx.beginPath();
+            ctx.moveTo(370, 120);
+            ctx.lineTo(370, 80);
+            ctx.lineTo(560, 80);
+            ctx.lineTo(560, 120);
+            ctx.stroke();
+
+            // 中间气压增加特效 (颜色加深暗示气体压缩)
+            ctx.fillStyle = `rgba(255, 165, 0, ${0.1 + val * 0.003})`;
+            ctx.fillRect(360, 80, 200, 40); // 顶部水平管段气体示意
+
+            // 3. 绘制 U 形管中的液体 (染色水)
+            const drawLiquid = (leftX, rightX, leftY, rightY) => {
+                ctx.fillStyle = "rgba(255, 50, 50, 0.7)"; // 红色液体
+                ctx.beginPath();
+                ctx.moveTo(leftX, leftY);
+                ctx.lineTo(leftX, BOTTOM_Y);
+                ctx.lineTo(rightX + TUBE_WIDTH, BOTTOM_Y);
+                ctx.lineTo(rightX + TUBE_WIDTH, rightY);
+                ctx.lineTo(rightX, rightY);
+                ctx.lineTo(rightX, BOTTOM_Y - TUBE_WIDTH);
+                ctx.lineTo(leftX + TUBE_WIDTH, BOTTOM_Y - TUBE_WIDTH);
+                ctx.lineTo(leftX + TUBE_WIDTH, leftY);
+                ctx.closePath();
+                ctx.fill();
+            };
+
+            // 渲染 U1 液体
+            drawLiquid(300, 360, u1_left_y, u1_right_y);
+            // 渲染 U2 液体
+            drawLiquid(550, 610, u2_left_y, u2_right_y);
+
+            // 4. 绘制 U 形管玻璃外壳
+            const drawTube = (x1, x2) => {
+                ctx.strokeStyle = "#333";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                // 外侧壁
+                ctx.moveTo(x1, 120); ctx.lineTo(x1, BOTTOM_Y); ctx.lineTo(x2 + TUBE_WIDTH, BOTTOM_Y); ctx.lineTo(x2 + TUBE_WIDTH, 120);
+                ctx.stroke();
+                // 内侧壁
+                ctx.beginPath();
+                ctx.moveTo(x1 + TUBE_WIDTH, 120); ctx.lineTo(x1 + TUBE_WIDTH, BOTTOM_Y - TUBE_WIDTH); ctx.lineTo(x2, BOTTOM_Y - TUBE_WIDTH); ctx.lineTo(x2, 120);
+                ctx.stroke();
+            };
+            drawTube(300, 360);
+            drawTube(550, 610);
+
+            // 5. 绘制参考线和文字标注
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "#333";
+            ctx.textAlign = "center";
+
+            ctx.fillText("U 形管 1", 340, 440);
+            ctx.fillText("U 形管 2", 590, 440);
+
+            // 初始基准线
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(250, BASE_Y);
+            ctx.lineTo(680, BASE_Y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // U1 的高度差标注 (h1)
+            if (val > 0) {
+                ctx.strokeStyle = "blue";
+                ctx.lineWidth = 1;
+                // 引线
+                ctx.beginPath(); ctx.moveTo(300, u1_left_y); ctx.lineTo(420, u1_left_y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(360, u1_right_y); ctx.lineTo(420, u1_right_y); ctx.stroke();
+                // 箭头线
+                ctx.beginPath(); ctx.moveTo(410, u1_left_y); ctx.lineTo(410, u1_right_y); ctx.stroke();
+                
+                ctx.fillStyle = "blue";
+                ctx.fillText(`h1 = ${h1.toFixed(1)}`, 450, (u1_left_y + u1_right_y)/2 + 5);
+
+                // U2 的高度差标注 (h2)
+                ctx.beginPath(); ctx.moveTo(550, u2_left_y); ctx.lineTo(670, u2_left_y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(610, u2_right_y); ctx.lineTo(670, u2_right_y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(660, u2_left_y); ctx.lineTo(660, u2_right_y); ctx.stroke();
+                
+                ctx.fillStyle = "green";
+                ctx.fillText(`h2 = ${h2.toFixed(1)}`, 710, (u2_left_y + u2_right_y)/2 + 5);
+
+                // 动态说明文字
+                ctx.fillStyle = "#d9534f";
+                ctx.textAlign = "left";
+                ctx.font = "bold 16px Arial";
+                ctx.fillText(`比较发现: h1 (${h1.toFixed(1)}) > h2 (${h2.toFixed(1)})`, 300, 50);
+                
+                // 解释中间空气压缩
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "#ff8c00";
+                ctx.fillText("↑ 中间段空气被压缩", 410, 100);
+            }
+        }
+
+        // 监听滑块事件
+        slider.addEventListener('input', draw);
+
+        // 初始绘制
+        draw();
+    </script>
+</body>
+</html>
