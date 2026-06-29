@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人眼晶狀體調節與光學成像模擬</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #12161a;
+            color: #ecf0f1;
+        }
+        
+        canvas {
+            display: block;
+            background-color: #0b0f13;
+            box-shadow: inset 0 0 80px rgba(0,0,0,0.8);
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            background: rgba(20, 30, 40, 0.85);
+            backdrop-filter: blur(12px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 5px 0;
+            color: #00cec9;
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.5);
+        }
+
+        p.subtitle {
+            font-size: 13px;
+            color: #bdc3c7;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #00cec9;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .radio-btn {
+            flex: 1;
+            padding: 10px 5px;
+            background: #2c3e50;
+            border: 2px solid #34495e;
+            color: white;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .radio-btn.active {
+            background: #00b894;
+            border-color: #00cec9;
+        }
+
+        .radio-btn[data-mode="myopia"].active { background: #d63031; border-color: #ff7675; }
+        .radio-btn[data-mode="presbyopia"].active { background: #e17055; border-color: #fab1a0; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #ecf0f1;
+        }
+
+        .checkbox-group input {
+            margin-right: 10px;
+            cursor: pointer;
+            accent-color: #0984e3;
+            width: 16px;
+            height: 16px;
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(15, 20, 25, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            border: 1px solid #34495e;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(20, 30, 40, 0.85);
+            padding: 15px;
+            padding-right: 35px;
+            border-radius: 8px;
+            max-width: 500px;
+            font-size: 13.5px;
+            line-height: 1.6;
+            color: #ecf0f1;
+            border-left: 4px solid #00cec9;
+            pointer-events: auto;
+            z-index: 10;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #info-panel.hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            color: #bdc3c7;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .close-btn:hover { color: #e74c3c; }
+
+        #btnShowInfo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(20, 30, 40, 0.85);
+            color: #ecf0f1;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border-left: 4px solid #00cec9;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        #btnShowInfo:hover { background: rgba(30, 45, 60, 0.9); }
+        #btnShowInfo.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
+
+        .highlight { color: #f1c40f; font-weight: bold; }
+        .focus-status { font-weight: bold; font-size: 16px; margin-top: 5px; }
+        .focus-good { color: #00b894; }
+        .focus-bad { color: #d63031; }
+    </style>
+</head>
+<body>
+
+    <canvas id="opticsCanvas"></canvas>
+
+    <div id="hud">
+        <div style="color: #bdc3c7; margin-bottom: 5px; font-weight: bold;">👁️ 眼睛生理狀態</div>
+        <div>物體距離: <span id="distVal" style="color: #0984e3;">500</span> mm</div>
+        <div>晶狀體焦距: <span id="focalVal" style="color: #fdcb6e;">0</span> mm</div>
+        <hr style="border-color: #34495e; margin: 8px 0;">
+        <div>睫狀肌狀態: <span id="muscleState" style="color: #e84393;">放鬆</span></div>
+        <div>懸韌帶狀態: <span id="ligamentState" style="color: #00cec9;">拉緊</span></div>
+        <div id="focusStatus" class="focus-status focus-good">✅ 視網膜成像清晰</div>
+    </div>
+
+    <div id="ui-container">
+        <h1>人眼光學與晶狀體調節</h1>
+        <p class="subtitle">拖動滑桿，觀察眼睛如何自動對焦。</p>
+
+        <div class="control-group">
+            <label for="distanceSlider">
+                <span>蠟燭距離 (物距):</span>
+                <span id="distDisp">遠</span>
+            </label>
+            <!-- 距離從 150 (近) 到 900 (遠) -->
+            <input type="range" id="distanceSlider" min="150" max="900" value="800">
+        </div>
+
+        <div class="control-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">視覺健康模式：</div>
+            <div class="radio-group" id="modeSelector">
+                <div class="radio-btn active" data-mode="normal">正常視力</div>
+                <div class="radio-btn" data-mode="myopia">近視 (眼軸長)</div>
+                <div class="radio-btn" data-mode="presbyopia">老花 (彈性差)</div>
+            </div>
+        </div>
+
+        <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">視覺化選項：</div>
+            <label class="checkbox-group">
+                <input type="checkbox" id="showRays" checked> 顯示光線路徑 (Ray Tracing)
+            </label>
+            <label class="checkbox-group">
+                <input type="checkbox" id="showImage" checked> 顯示視網膜成像 (倒立實像)
+            </label>
+        </div>
+    </div>
+
+    <button id="btnShowInfo" class="hidden" title="顯示生理學解析">💡 顯示說明</button>
+
+    <div id="info-panel">
+        <button id="btnCloseInfo" class="close-btn" title="隱藏說明">✖</button>
+        <strong>💡 生理光學解析：晶狀體的「自動對焦」</strong><br><br>
+        為了讓光線永遠精準匯聚在距離固定的視網膜上，人眼必須改變焦距：<br>
+        🔭 <strong>看遠處 (放鬆)：</strong> <span class="highlight">睫狀肌舒張</span> → 懸韌帶拉緊 → 晶狀體被拉扁 (厚度減小) → 焦距變長。<br>
+        📖 <strong>看近處 (用力)：</strong> <span class="highlight">睫狀肌收縮</span> (向內圈縮緊) → 懸韌帶放鬆 → 晶狀體依靠自身彈性變凸 (厚度增加) → 焦距變短，折射能力變強！<br><br>
+        ⚠️ <strong>近視與老花：</strong><br>
+        - <strong>近視：</strong> 眼球過長，看遠時晶狀體已無法變得更扁，光線提早匯聚，導致遠處模糊。<br>
+        - <strong>老花/遠視：</strong> 晶狀體老化失去彈性，看近時無法變厚，光線匯聚在視網膜後方，導致近處模糊。
+    </div>
+
+    <script>
+        const canvas = document.getElementById('opticsCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Elements
+        const distanceSlider = document.getElementById('distanceSlider');
+        const distDisp = document.getElementById('distDisp');
+        const hudDist = document.getElementById('distVal');
+        const hudFocal = document.getElementById('focalVal');
+        const hudMuscle = document.getElementById('muscleState');
+        const hudLigament = document.getElementById('ligamentState');
+        const hudFocus = document.getElementById('focusStatus');
+        
+        const cbRays = document.getElementById('showRays');
+        const cbImage = document.getElementById('showImage');
+        const radios = document.querySelectorAll('.radio-btn');
+
+        const infoPanel = document.getElementById('info-panel');
+        const btnCloseInfo = document.getElementById('btnCloseInfo');
+        const btnShowInfo = document.getElementById('btnShowInfo');
+
+        btnCloseInfo.addEventListener('click', () => {
+            infoPanel.classList.add('hidden');
+            btnShowInfo.classList.remove('hidden');
+        });
+        btnShowInfo.addEventListener('click', () => {
+            infoPanel.classList.remove('hidden');
+            btnShowInfo.classList.add('hidden');
+        });
+
+        // --- 光學參數 ---
+        let eyeMode = 'normal'; // 'normal', 'myopia', 'presbyopia'
+        let objDist = parseInt(distanceSlider.value);
+        
+        // 畫布坐標系統
+        let cx = 0; // 晶狀體中心 X
+        let cy = 0; // 光軸高度 (畫布中心 Y)
+        const eyeRadius = 160;
+        let retinaDist = 160; // 視網膜到晶狀體的距離 (正常眼)
+        
+        const objHeight = 50; // 蠟燭高度
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // 將晶狀體放在偏右側，留出左側空間放物體
+            cx = canvas.width - 350;
+            cy = canvas.height / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 綁定事件
+        distanceSlider.addEventListener('input', (e) => {
+            objDist = parseInt(e.target.value);
+            if (objDist > 700) distDisp.textContent = "遠 (放鬆)";
+            else if (objDist < 300) distDisp.textContent = "近 (疲勞)";
+            else distDisp.textContent = "中等";
+        });
+
+        radios.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                radios.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                eyeMode = e.target.dataset.mode;
+            });
+        });
+
+        // --- 繪圖函數 ---
+
+        function drawCandle(ctx, x, y, h, isVirtual = false, blurAmount = 0) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            if (blurAmount > 0) {
+                ctx.filter = `blur(${blurAmount}px)`;
+                ctx.globalAlpha = Math.max(0.2, 1 - blurAmount/10);
+            }
+
+            // 蠟燭本體
+            ctx.fillStyle = isVirtual ? 'rgba(255, 255, 255, 0.5)' : '#ecf0f1';
+            // y 是底座，向負 y 畫
+            ctx.fillRect(-8, -h, 16, h);
+            
+            // 燭芯
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-1, -h - 4, 2, 4);
+
+            // 火焰
+            ctx.beginPath();
+            ctx.moveTo(0, -h - 18);
+            ctx.quadraticCurveTo(8, -h - 8, 0, -h - 4);
+            ctx.quadraticCurveTo(-8, -h - 8, 0, -h - 18);
+            ctx.fillStyle = isVirtual ? 'rgba(253, 203, 110, 0.6)' : '#fdcb6e';
+            ctx.fill();
+            // 內焰
+            ctx.beginPath();
+            ctx.moveTo(0, -h - 14);
+            ctx.quadraticCurveTo(4, -h - 8, 0, -h - 4);
+            ctx.quadraticCurveTo(-4, -h - 8, 0, -h - 14);
+            ctx.fillStyle = isVirtual ? 'rgba(225, 112, 85, 0.6)' : '#e17055';
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function render() {
+            requestAnimationFrame(render);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // --- 1. 計算光學與生理狀態 ---
+            
+            // 設定眼軸長度 (近視眼軸變長)
+            if (eyeMode === 'myopia') {
+                retinaDist = 230; // 加長眼軸，確保看遠處時所需焦距超過晶狀體極限
+            } else {
+                retinaDist = 160;
+            }
+
+            // 目標所需焦距 (Thin lens equation: 1/f = 1/u + 1/v)
+            // u = objDist, v = retinaDist (理想情況)
+            let requiredF = (objDist * retinaDist) / (objDist + retinaDist);
+            
+            // 晶狀體調節能力限制
+            let actualF = requiredF;
+            let focusError = 0; // 散焦程度
+
+            if (eyeMode === 'normal') {
+                // 正常眼能調節範圍: 假設能從看無窮遠 (f=160) 到看很近 (f=75)
+                if (actualF > 160) actualF = 160;
+                if (actualF < 75) actualF = 75;
+            } else if (eyeMode === 'myopia') {
+                // 近視：晶狀體無法變得足夠扁平，最大焦距受限
+                // 即使完全放鬆，f 最大只有 160，但視網膜在 190
+                if (actualF > 160) actualF = 160;
+                if (actualF < 75) actualF = 75;
+            } else if (eyeMode === 'presbyopia') {
+                // 老花：晶狀體失去彈性，無法變凸，最小焦距受限
+                if (actualF > 160) actualF = 160;
+                if (actualF < 120) actualF = 120; // 無法聚焦近物
+            }
+
+            // 實際成像距離 v' = (u * f) / (u - f)
+            let actualV = (objDist * actualF) / (objDist - actualF);
+            
+            // 計算散焦程度 (成像點偏離視網膜的距離)
+            let defocusDist = actualV - retinaDist; 
+            
+            // --- 2. 計算視覺化參數 ---
+            
+            // 晶狀體厚度 (反比於焦距：焦距越短，晶狀體越凸/厚)
+            // 假設 f 從 160 到 75，厚度從 15 到 40
+            let lensThickness = 15 + ((160 - actualF) / (160 - 75)) * 25;
+            
+            // 睫狀肌與懸韌帶狀態
+            // 焦距短(看近) = 肌肉收縮(變厚)，韌帶放鬆
+            let effort = (160 - actualF) / (160 - 75); // 0 = 放鬆, 1 = 最緊
+            
+            // 更新 HUD
+            hudDist.textContent = objDist;
+            hudFocal.textContent = actualF.toFixed(1);
+            
+            if (effort < 0.2) {
+                hudMuscle.textContent = "放鬆 (扁平)";
+                hudMuscle.style.color = "#00b894";
+                hudLigament.textContent = "拉緊";
+                hudLigament.style.color = "#d63031";
+            } else if (effort > 0.8) {
+                hudMuscle.textContent = "強烈收縮 (變厚)";
+                hudMuscle.style.color = "#d63031";
+                hudLigament.textContent = "完全放鬆";
+                hudLigament.style.color = "#00b894";
+            } else {
+                hudMuscle.textContent = "部分收縮";
+                hudMuscle.style.color = "#fdcb6e";
+                hudLigament.textContent = "部分放鬆";
+                hudLigament.style.color = "#fdcb6e";
+            }
+
+            let blurRadius = Math.abs(defocusDist) * 0.15;
+            if (blurRadius <= 1.0) {
+                hudFocus.innerHTML = "✅ 視網膜成像清晰";
+                hudFocus.className = "focus-status focus-good";
+            } else {
+                if (defocusDist < 0) {
+                    hudFocus.innerHTML = "❌ 成像在視網膜前 (近視模糊)";
+                } else {
+                    hudFocus.innerHTML = "❌ 成像在視網膜後 (老花模糊)";
+                }
+                hudFocus.className = "focus-status focus-bad";
+            }
+
+            // --- 3. 繪製眼球結構 ---
+            
+            // 光軸
+            ctx.beginPath();
+            ctx.moveTo(0, cy);
+            ctx.lineTo(canvas.width, cy);
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.setLineDash([10, 10]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 眼球本體 (鞏膜與視網膜)
+            ctx.save();
+            ctx.translate(cx, cy);
+            
+            ctx.beginPath();
+            // 眼球是一個圓弧，後方是視網膜
+            ctx.arc(retinaDist - eyeRadius, 0, eyeRadius, -Math.PI*0.45, Math.PI*0.45);
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#dfe6e9'; // 鞏膜白
+            ctx.stroke();
+            
+            // 視網膜 (內層橘紅色)
+            ctx.beginPath();
+            ctx.arc(retinaDist - eyeRadius, 0, eyeRadius - 3, -Math.PI*0.4, Math.PI*0.4);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#e17055'; 
+            ctx.stroke();
+
+            // 標示視網膜位置
+            ctx.fillStyle = '#e17055';
+            ctx.font = '14px Arial';
+            ctx.fillText("視網膜", retinaDist + 15, -40);
+            
+            // 角膜 (前面突起)
+            ctx.beginPath();
+            ctx.arc(-25, 0, 45, Math.PI*0.6, Math.PI*1.4);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(116, 185, 255, 0.6)'; // 透明淡藍
+            ctx.stroke();
+
+            // 睫狀體與懸韌帶
+            // 上方
+            ctx.fillStyle = '#d63031'; // 肌肉紅
+            let muscleSize = 10 + effort * 8; // 收縮時變大變厚
+            ctx.beginPath(); ctx.arc(-5, -60 + effort*5, muscleSize, 0, Math.PI*2); ctx.fill();
+            // 下方
+            ctx.beginPath(); ctx.arc(-5, 60 - effort*5, muscleSize, 0, Math.PI*2); ctx.fill();
+            
+            // 懸韌帶 (線條)
+            ctx.strokeStyle = '#ecf0f1';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 1 - effort*0.5; // 放鬆時變淡
+            for(let i=0; i<3; i++) {
+                ctx.beginPath(); ctx.moveTo(-5, -60 + effort*5 + muscleSize); ctx.lineTo(0, -20 - i*5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-5, 60 - effort*5 - muscleSize); ctx.lineTo(0, 20 + i*5); ctx.stroke();
+            }
+            ctx.globalAlpha = 1.0;
+
+            // 晶狀體 (Lens)
+            ctx.beginPath();
+            ctx.moveTo(0, -45);
+            // 用二次貝茲曲線畫凸透鏡，控制點距離決定厚度
+            ctx.quadraticCurveTo(lensThickness, 0, 0, 45);
+            ctx.quadraticCurveTo(-lensThickness, 0, 0, -45);
+            ctx.fillStyle = 'rgba(129, 236, 236, 0.4)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0, 206, 201, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.restore();
+
+            // --- 4. 繪製物體 (蠟燭) ---
+            let objAbsX = cx - objDist;
+            let objAbsY = cy; // 蠟燭底座在光軸上
+            drawCandle(ctx, objAbsX, objAbsY, objHeight);
+
+            // 標示物距
+            ctx.beginPath();
+            ctx.moveTo(objAbsX, cy + 10);
+            ctx.lineTo(cx, cy + 10);
+            ctx.strokeStyle = '#0984e3';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.fillStyle = '#0984e3';
+            ctx.textAlign = 'center';
+            ctx.fillText("物距", (objAbsX + cx)/2, cy + 25);
+
+            // --- 5. 繪製光線 (Ray Tracing) ---
+            if (cbRays.checked) {
+                ctx.strokeStyle = 'rgba(253, 203, 110, 0.8)';
+                ctx.lineWidth = 2;
+                
+                // 光源點：火焰中心
+                let flameY = cy - objHeight - 10;
+                
+                // 光線打在晶狀體上的三個點
+                let intersectYs = [cy - 30, cy, cy + 30];
+                
+                // 實際成像點 (絕對座標)
+                let imgAbsX = cx + actualV;
+                let magnification = -actualV / objDist; // 放大率 (負值代表倒立)
+                let imgAbsY = cy + (flameY - cy) * magnification; 
+                
+                intersectYs.forEach(iy => {
+                    // 入射光
+                    ctx.beginPath();
+                    ctx.moveTo(objAbsX, flameY);
+                    ctx.lineTo(cx, iy);
+                    ctx.stroke();
+                    
+                    // 折射光
+                    ctx.beginPath();
+                    ctx.moveTo(cx, iy);
+                    
+                    // 如果射出視網膜，畫到底就好；如果是近視匯聚在前方，繼續畫延伸線
+                    // 為了視覺效果，我們畫到圖像點再稍微延伸
+                    let extendRatio = 1.2;
+                    let endX = cx + (imgAbsX - cx) * extendRatio;
+                    let endY = iy + (imgAbsY - iy) * extendRatio;
+                    
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                });
+            }
+
+            // --- 6. 繪製視網膜成像 ---
+            if (cbImage.checked) {
+                // 像的位置
+                let imgAbsX = cx + actualV;
+                let magnification = -actualV / objDist; 
+                let imgHeight = objHeight * Math.abs(magnification);
+                
+                // 在實際匯聚點畫一個淡淡的虛擬像 (幫助理解)
+                if (Math.abs(defocusDist) > 5) {
+                    drawCandle(ctx, imgAbsX, cy, imgHeight, true, 0);
+                    // 畫一條虛線指示這是「實際成像面」
+                    ctx.beginPath();
+                    ctx.moveTo(imgAbsX, cy - 80);
+                    ctx.lineTo(imgAbsX, cy + 80);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // 在視網膜上畫出最終接收到的影像 (如果有散焦，影像會模糊)
+                // 視網膜固定位置：cx + retinaDist
+                let retinaMag = -retinaDist / objDist;
+                let retinaImgHeight = objHeight * Math.abs(retinaMag);
+                
+                // 如果散焦，將影像強行畫在視網膜上並加上模糊濾鏡
+                drawCandle(ctx, cx + retinaDist, cy, retinaImgHeight, false, blurRadius);
+            }
+        }
+
+        render();
+    </script>
+</body>
+</html>
