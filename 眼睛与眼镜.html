@@ -31,19 +31,41 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
             z-index: 10;
+            transition: opacity 0.3s ease;
+        }
+
+        #ui-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #ui-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 15px;
+        }
+
+        #ui-header:active {
+            cursor: grabbing;
         }
 
         h1 {
             font-size: 18px;
-            margin: 0 0 5px 0;
+            margin: 0;
             color: #00cec9;
             text-shadow: 0 0 10px rgba(0, 206, 201, 0.5);
+            pointer-events: none; /* 讓拖曳事件順利穿透給 header */
         }
 
         p.subtitle {
             font-size: 13px;
             color: #bdc3c7;
             margin-bottom: 20px;
+            margin-top: 0;
             line-height: 1.5;
         }
 
@@ -181,6 +203,26 @@
         #btnShowInfo:hover { background: rgba(30, 45, 60, 0.9); }
         #btnShowInfo.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
 
+        #btnShowUI {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(20, 30, 40, 0.85);
+            color: #ecf0f1;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border-right: 4px solid #00cec9;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        #btnShowUI:hover { background: rgba(30, 45, 60, 0.9); }
+        #btnShowUI.hidden { opacity: 0; pointer-events: none; }
+
         .highlight { color: #f1c40f; font-weight: bold; }
         .focus-status { font-weight: bold; font-size: 16px; margin-top: 5px; }
         .focus-good { color: #00b894; }
@@ -201,16 +243,21 @@
         <div id="focusStatus" class="focus-status focus-good">✅ 視網膜成像清晰</div>
     </div>
 
+    <!-- 重新顯示控制台的按鈕 (預設隱藏) -->
+    <button id="btnShowUI" class="hidden" title="顯示控制台">⚙️ 顯示控制台</button>
+
     <div id="ui-container">
-        <h1>人眼光學與晶狀體調節</h1>
-        <p class="subtitle">拖動滑桿，觀察眼睛如何自動對焦。</p>
+        <div id="ui-header" title="按住可拖動面板">
+            <h1>人眼光學與晶狀體調節</h1>
+            <button id="btnCloseUI" style="background:none; border:none; color:#bdc3c7; cursor:pointer; font-size:16px;" title="隱藏控制台">✖</button>
+        </div>
+        <p class="subtitle">拖動標題列可移動，拖動滑桿觀察對焦。</p>
 
         <div class="control-group">
             <label for="distanceSlider">
                 <span>蠟燭距離 (物距):</span>
                 <span id="distDisp">遠</span>
             </label>
-            <!-- 距離從 150 (近) 到 900 (遠) -->
             <input type="range" id="distanceSlider" min="150" max="900" value="800">
         </div>
 
@@ -220,6 +267,15 @@
                 <div class="radio-btn active" data-mode="normal">正常視力</div>
                 <div class="radio-btn" data-mode="myopia">近視 (眼軸長)</div>
                 <div class="radio-btn" data-mode="presbyopia">老花 (彈性差)</div>
+            </div>
+        </div>
+
+        <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">佩戴矯正鏡片：</div>
+            <div class="radio-group" id="lensSelector">
+                <div class="radio-btn active" data-lens="none">無鏡片</div>
+                <div class="radio-btn" data-lens="concave">凹透鏡 (近視)</div>
+                <div class="radio-btn" data-lens="convex">凸透鏡 (老花)</div>
             </div>
         </div>
 
@@ -238,13 +294,13 @@
 
     <div id="info-panel">
         <button id="btnCloseInfo" class="close-btn" title="隱藏說明">✖</button>
-        <strong>💡 生理光學解析：晶狀體的「自動對焦」</strong><br><br>
+        <strong>💡 生理光學解析：晶狀體的「自動對焦」與鏡片矯正</strong><br><br>
         為了讓光線永遠精準匯聚在距離固定的視網膜上，人眼必須改變焦距：<br>
         🔭 <strong>看遠處 (放鬆)：</strong> <span class="highlight">睫狀肌舒張</span> → 懸韌帶拉緊 → 晶狀體被拉扁 (厚度減小) → 焦距變長。<br>
         📖 <strong>看近處 (用力)：</strong> <span class="highlight">睫狀肌收縮</span> (向內圈縮緊) → 懸韌帶放鬆 → 晶狀體依靠自身彈性變凸 (厚度增加) → 焦距變短，折射能力變強！<br><br>
         ⚠️ <strong>近視與老花：</strong><br>
-        - <strong>近視：</strong> 眼球過長，看遠時晶狀體已無法變得更扁，光線提早匯聚，導致遠處模糊。<br>
-        - <strong>老花/遠視：</strong> 晶狀體老化失去彈性，看近時無法變厚，光線匯聚在視網膜後方，導致近處模糊。
+        - <strong>近視：</strong> 眼球過長，光線提早匯聚。配戴 <strong>凹透鏡</strong> 讓光線先發散，延後匯聚點。<br>
+        - <strong>老花/遠視：</strong> 晶狀體失去彈性，光線匯聚在視網膜後。配戴 <strong>凸透鏡</strong> 讓光線先匯聚，提前匯聚點。
     </div>
 
     <script>
@@ -268,17 +324,77 @@
         const btnCloseInfo = document.getElementById('btnCloseInfo');
         const btnShowInfo = document.getElementById('btnShowInfo');
 
+        const uiContainer = document.getElementById('ui-container');
+        const uiHeader = document.getElementById('ui-header');
+        const btnCloseUI = document.getElementById('btnCloseUI');
+        const btnShowUI = document.getElementById('btnShowUI');
+
+        // --- 隱藏/顯示底部說明 ---
         btnCloseInfo.addEventListener('click', () => {
             infoPanel.classList.add('hidden');
             btnShowInfo.classList.remove('hidden');
         });
+
         btnShowInfo.addEventListener('click', () => {
             infoPanel.classList.remove('hidden');
             btnShowInfo.classList.add('hidden');
         });
 
+        // --- 隱藏/顯示控制台事件 ---
+        btnCloseUI.addEventListener('click', () => {
+            uiContainer.classList.add('hidden');
+            btnShowUI.classList.remove('hidden');
+        });
+
+        btnShowUI.addEventListener('click', () => {
+            uiContainer.classList.remove('hidden');
+            btnShowUI.classList.add('hidden');
+        });
+
+        // --- 拖動控制台邏輯 ---
+        let isDraggingUI = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        uiHeader.addEventListener('mousedown', (e) => {
+            isDraggingUI = true;
+            const rect = uiContainer.getBoundingClientRect();
+            
+            // 將 right 屬性清除，改用 left 和 top 來定位，以防拖曳衝突
+            uiContainer.style.right = 'auto';
+            uiContainer.style.bottom = 'auto';
+            uiContainer.style.left = rect.left + 'px';
+            uiContainer.style.top = rect.top + 'px';
+
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            
+            uiHeader.style.cursor = 'grabbing';
+            e.preventDefault(); // 防止拖曳時選取文字
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingUI) return;
+            
+            let newX = e.clientX - dragOffsetX;
+            let newY = e.clientY - dragOffsetY;
+
+            // 確保面板不會被拖出視窗邊界
+            newX = Math.max(0, Math.min(newX, window.innerWidth - uiContainer.offsetWidth));
+            newY = Math.max(0, Math.min(newY, window.innerHeight - uiContainer.offsetHeight));
+
+            uiContainer.style.left = newX + 'px';
+            uiContainer.style.top = newY + 'px';
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDraggingUI = false;
+            uiHeader.style.cursor = 'grab';
+        });
+
         // --- 光學參數 ---
         let eyeMode = 'normal'; // 'normal', 'myopia', 'presbyopia'
+        let lensMode = 'none'; // 'none', 'concave', 'convex'
         let objDist = parseInt(distanceSlider.value);
         
         // 畫布坐標系統
@@ -292,8 +408,8 @@
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            // 將晶狀體放在偏右側，留出左側空間放物體
-            cx = canvas.width - 350;
+            // 將晶狀體中心向左移，預留 550px 的空間以確保不會被控制台遮擋
+            cx = Math.max(250, canvas.width - 550);
             cy = canvas.height / 2;
         }
         window.addEventListener('resize', resize);
@@ -309,9 +425,15 @@
 
         radios.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                radios.forEach(b => b.classList.remove('active'));
+                const group = e.target.closest('.radio-group');
+                group.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
-                eyeMode = e.target.dataset.mode;
+                
+                if (group.id === 'modeSelector') {
+                    eyeMode = e.target.dataset.mode;
+                } else if (group.id === 'lensSelector') {
+                    lensMode = e.target.dataset.lens;
+                }
             });
         });
 
@@ -366,9 +488,28 @@
                 retinaDist = 160;
             }
 
-            // 目標所需焦距 (Thin lens equation: 1/f = 1/u + 1/v)
-            // u = objDist, v = retinaDist (理想情況)
-            let requiredF = (objDist * retinaDist) / (objDist + retinaDist);
+            // 鏡片矯正計算 (虛像的表觀距離)
+            let apparentDist = objDist;
+            let glassF = 0;
+            if (lensMode === 'concave') glassF = -400; // 凹透鏡焦距 (發散)
+            if (lensMode === 'convex') glassF = 200;   // 凸透鏡焦距 (匯聚)
+            
+            let glassMagnification = 1.0;
+
+            if (lensMode !== 'none') {
+                // 透鏡成像公式: 1/v = 1/f - 1/u
+                let invV = 1 / glassF - 1 / objDist;
+                let v = 1 / invV;
+                if (v < 0) {
+                    apparentDist = -v; // 產生虛像，成為眼睛觀看的新物點
+                } else {
+                    apparentDist = 10000; // 如果形成實像，簡化為無窮遠平行光
+                }
+                glassMagnification = Math.abs(v / objDist);
+            }
+
+            // 目標所需焦距 (Thin lens equation: 1/f = 1/u + 1/v) 基於表觀距離
+            let requiredF = (apparentDist * retinaDist) / (apparentDist + retinaDist);
             
             // 晶狀體調節能力限制
             let actualF = requiredF;
@@ -380,7 +521,6 @@
                 if (actualF < 75) actualF = 75;
             } else if (eyeMode === 'myopia') {
                 // 近視：晶狀體無法變得足夠扁平，最大焦距受限
-                // 即使完全放鬆，f 最大只有 160，但視網膜在 190
                 if (actualF > 160) actualF = 160;
                 if (actualF < 75) actualF = 75;
             } else if (eyeMode === 'presbyopia') {
@@ -390,7 +530,7 @@
             }
 
             // 實際成像距離 v' = (u * f) / (u - f)
-            let actualV = (objDist * actualF) / (objDist - actualF);
+            let actualV = (apparentDist * actualF) / (apparentDist - actualF);
             
             // 計算散焦程度 (成像點偏離視網膜的距離)
             let defocusDist = actualV - retinaDist; 
@@ -512,10 +652,41 @@
 
             ctx.restore();
 
-            // --- 4. 繪製物體 (蠟燭) ---
+            // --- 4. 繪製物體 (蠟燭) 與眼鏡鏡片 ---
             let objAbsX = cx - objDist;
             let objAbsY = cy; // 蠟燭底座在光軸上
+            let glassX = cx - 90; // 眼鏡位置
+
             drawCandle(ctx, objAbsX, objAbsY, objHeight);
+
+            // 繪製矯正鏡片
+            if (lensMode !== 'none') {
+                ctx.fillStyle = 'rgba(116, 185, 255, 0.3)';
+                ctx.strokeStyle = 'rgba(116, 185, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                let gh = 50; 
+                if (lensMode === 'convex') {
+                    // 凸透鏡
+                    ctx.moveTo(glassX, cy - gh);
+                    ctx.quadraticCurveTo(glassX + 15, cy, glassX, cy + gh);
+                    ctx.quadraticCurveTo(glassX - 15, cy, glassX, cy - gh);
+                } else { 
+                    // 凹透鏡
+                    ctx.moveTo(glassX - 5, cy - gh);
+                    ctx.lineTo(glassX + 5, cy - gh);
+                    ctx.quadraticCurveTo(glassX + 2, cy, glassX + 5, cy + gh);
+                    ctx.lineTo(glassX - 5, cy + gh);
+                    ctx.quadraticCurveTo(glassX - 2, cy, glassX - 5, cy - gh);
+                }
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#74b9ff';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(lensMode === 'convex' ? "凸透鏡" : "凹透鏡", glassX, cy + gh + 15);
+            }
 
             // 標示物距
             ctx.beginPath();
@@ -541,22 +712,42 @@
                 
                 // 實際成像點 (絕對座標)
                 let imgAbsX = cx + actualV;
-                let magnification = -actualV / objDist; // 放大率 (負值代表倒立)
-                let imgAbsY = cy + (flameY - cy) * magnification; 
+                let magnification = -actualV / apparentDist; // 放大率
+                
+                // 虛像(物體經鏡片折射後)的坐標
+                let virtFlameY = cy + (flameY - cy) * glassMagnification;
+                let imgAbsY = cy + (virtFlameY - cy) * magnification; 
                 
                 intersectYs.forEach(iy => {
-                    // 入射光
-                    ctx.beginPath();
-                    ctx.moveTo(objAbsX, flameY);
-                    ctx.lineTo(cx, iy);
-                    ctx.stroke();
+                    if (lensMode === 'none') {
+                        // 正常光線：從物體直射眼睛
+                        ctx.beginPath();
+                        ctx.moveTo(objAbsX, flameY);
+                        ctx.lineTo(cx, iy);
+                        ctx.stroke();
+                    } else {
+                        // 矯正光線：先射向眼鏡鏡片，折射後再進入眼睛
+                        let virtObjAbsX = glassX - apparentDist;
+                        let t = (glassX - virtObjAbsX) / (cx - virtObjAbsX);
+                        let gy = virtFlameY + t * (iy - virtFlameY);
+
+                        // 物體 -> 眼鏡
+                        ctx.beginPath();
+                        ctx.moveTo(objAbsX, flameY);
+                        ctx.lineTo(glassX, gy);
+                        ctx.stroke();
+
+                        // 眼鏡 -> 晶狀體
+                        ctx.beginPath();
+                        ctx.moveTo(glassX, gy);
+                        ctx.lineTo(cx, iy);
+                        ctx.stroke();
+                    }
                     
-                    // 折射光
+                    // 晶狀體折射光 -> 視網膜
                     ctx.beginPath();
                     ctx.moveTo(cx, iy);
                     
-                    // 如果射出視網膜，畫到底就好；如果是近視匯聚在前方，繼續畫延伸線
-                    // 為了視覺效果，我們畫到圖像點再稍微延伸
                     let extendRatio = 1.2;
                     let endX = cx + (imgAbsX - cx) * extendRatio;
                     let endY = iy + (imgAbsY - iy) * extendRatio;
@@ -570,8 +761,8 @@
             if (cbImage.checked) {
                 // 像的位置
                 let imgAbsX = cx + actualV;
-                let magnification = -actualV / objDist; 
-                let imgHeight = objHeight * Math.abs(magnification);
+                let magnification = -actualV / apparentDist; 
+                let imgHeight = (objHeight * glassMagnification) * Math.abs(magnification);
                 
                 // 在實際匯聚點畫一個淡淡的虛擬像 (幫助理解)
                 if (Math.abs(defocusDist) > 5) {
@@ -587,11 +778,9 @@
                 }
 
                 // 在視網膜上畫出最終接收到的影像 (如果有散焦，影像會模糊)
-                // 視網膜固定位置：cx + retinaDist
-                let retinaMag = -retinaDist / objDist;
-                let retinaImgHeight = objHeight * Math.abs(retinaMag);
+                let retinaMag = -retinaDist / apparentDist;
+                let retinaImgHeight = (objHeight * glassMagnification) * Math.abs(retinaMag);
                 
-                // 如果散焦，將影像強行畫在視網膜上並加上模糊濾鏡
                 drawCandle(ctx, cx + retinaDist, cy, retinaImgHeight, false, blurRadius);
             }
         }
