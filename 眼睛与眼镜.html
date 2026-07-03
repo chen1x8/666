@@ -31,12 +31,7 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
             z-index: 10;
-            transition: opacity 0.3s ease;
-        }
-
-        #ui-container.hidden {
-            opacity: 0;
-            pointer-events: none;
+            transition: all 0.3s ease;
         }
 
         #ui-header {
@@ -203,25 +198,9 @@
         #btnShowInfo:hover { background: rgba(30, 45, 60, 0.9); }
         #btnShowInfo.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
 
-        #btnShowUI {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(20, 30, 40, 0.85);
-            color: #ecf0f1;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 10px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 10;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            border-right: 4px solid #00cec9;
-            transition: opacity 0.3s ease, transform 0.3s ease;
+        #ui-collapsible.hidden {
+            display: none;
         }
-        #btnShowUI:hover { background: rgba(30, 45, 60, 0.9); }
-        #btnShowUI.hidden { opacity: 0; pointer-events: none; }
 
         .highlight { color: #f1c40f; font-weight: bold; }
         .focus-status { font-weight: bold; font-size: 16px; margin-top: 5px; }
@@ -243,17 +222,14 @@
         <div id="focusStatus" class="focus-status focus-good">✅ 視網膜成像清晰</div>
     </div>
 
-    <!-- 重新顯示控制台的按鈕 (預設隱藏) -->
-    <button id="btnShowUI" class="hidden" title="顯示控制台">⚙️ 顯示控制台</button>
-
     <div id="ui-container">
         <div id="ui-header" title="按住可拖動面板">
             <h1>人眼光學與晶狀體調節</h1>
-            <button id="btnCloseUI" style="background:none; border:none; color:#bdc3c7; cursor:pointer; font-size:16px;" title="隱藏控制台">✖</button>
+            <button id="btnToggleUI" style="background:none; border:none; color:#bdc3c7; cursor:pointer; font-size:16px;" title="收起進階設定">➖</button>
         </div>
-        <p class="subtitle">拖動標題列可移動，拖動滑桿觀察對焦。</p>
-
-        <div class="control-group">
+        
+        <!-- 獨立放在折疊區外部的「距離調節拖曳條」 -->
+        <div class="control-group" style="margin-bottom: 0;">
             <label for="distanceSlider">
                 <span>蠟燭距離 (物距):</span>
                 <span id="distDisp">遠</span>
@@ -261,32 +237,36 @@
             <input type="range" id="distanceSlider" min="150" max="900" value="800">
         </div>
 
-        <div class="control-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">視覺健康模式：</div>
-            <div class="radio-group" id="modeSelector">
-                <div class="radio-btn active" data-mode="normal">正常視力</div>
-                <div class="radio-btn" data-mode="myopia">近視 (眼軸長)</div>
-                <div class="radio-btn" data-mode="presbyopia">老花 (彈性差)</div>
-            </div>
-        </div>
+        <div id="ui-collapsible">
+            <p class="subtitle" style="margin-top: 15px;">拖動標題列可移動，拖動滑桿觀察對焦。</p>
 
-        <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">佩戴矯正鏡片：</div>
-            <div class="radio-group" id="lensSelector">
-                <div class="radio-btn active" data-lens="none">無鏡片</div>
-                <div class="radio-btn" data-lens="concave">凹透鏡 (近視)</div>
-                <div class="radio-btn" data-lens="convex">凸透鏡 (老花)</div>
+            <div class="control-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">視覺健康模式：</div>
+                <div class="radio-group" id="modeSelector">
+                    <div class="radio-btn active" data-mode="normal">正常視力</div>
+                    <div class="radio-btn" data-mode="myopia">近視 (眼軸長)</div>
+                    <div class="radio-btn" data-mode="presbyopia">老花 (彈性差)</div>
+                </div>
             </div>
-        </div>
 
-        <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">視覺化選項：</div>
-            <label class="checkbox-group">
-                <input type="checkbox" id="showRays" checked> 顯示光線路徑 (Ray Tracing)
-            </label>
-            <label class="checkbox-group">
-                <input type="checkbox" id="showImage" checked> 顯示視網膜成像 (倒立實像)
-            </label>
+            <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">佩戴矯正鏡片：</div>
+                <div class="radio-group" id="lensSelector">
+                    <div class="radio-btn active" data-lens="none">無鏡片</div>
+                    <div class="radio-btn" data-lens="concave">凹透鏡 (近視)</div>
+                    <div class="radio-btn" data-lens="convex">凸透鏡 (老花)</div>
+                </div>
+            </div>
+
+            <div class="control-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-weight: bold; margin-bottom: 10px; color: #bdc3c7;">視覺化選項：</div>
+                <label class="checkbox-group">
+                    <input type="checkbox" id="showRays" checked> 顯示光線路徑 (Ray Tracing)
+                </label>
+                <label class="checkbox-group">
+                    <input type="checkbox" id="showImage" checked> 顯示視網膜成像 (倒立實像)
+                </label>
+            </div>
         </div>
     </div>
 
@@ -326,8 +306,8 @@
 
         const uiContainer = document.getElementById('ui-container');
         const uiHeader = document.getElementById('ui-header');
-        const btnCloseUI = document.getElementById('btnCloseUI');
-        const btnShowUI = document.getElementById('btnShowUI');
+        const btnToggleUI = document.getElementById('btnToggleUI');
+        const uiCollapsible = document.getElementById('ui-collapsible');
 
         // --- 隱藏/顯示底部說明 ---
         btnCloseInfo.addEventListener('click', () => {
@@ -340,15 +320,16 @@
             btnShowInfo.classList.add('hidden');
         });
 
-        // --- 隱藏/顯示控制台事件 ---
-        btnCloseUI.addEventListener('click', () => {
-            uiContainer.classList.add('hidden');
-            btnShowUI.classList.remove('hidden');
-        });
-
-        btnShowUI.addEventListener('click', () => {
-            uiContainer.classList.remove('hidden');
-            btnShowUI.classList.add('hidden');
+        // --- 折疊/展開 控制台事件 ---
+        btnToggleUI.addEventListener('click', () => {
+            uiCollapsible.classList.toggle('hidden');
+            if (uiCollapsible.classList.contains('hidden')) {
+                btnToggleUI.textContent = '➕';
+                btnToggleUI.title = '展開進階設定';
+            } else {
+                btnToggleUI.textContent = '➖';
+                btnToggleUI.title = '收起進階設定';
+            }
         });
 
         // --- 拖動控制台邏輯 ---
