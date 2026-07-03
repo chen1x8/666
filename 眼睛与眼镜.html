@@ -439,10 +439,14 @@
 
         // --- 繪圖函數 ---
 
-        function drawCandle(ctx, x, y, h, isVirtual = false, blurAmount = 0) {
+        function drawCandle(ctx, x, y, h, isVirtual = false, blurAmount = 0, inverted = false) {
             ctx.save();
             ctx.translate(x, y);
             
+            if (inverted) {
+                ctx.scale(1, -1); // 垂直翻轉，形成倒立實像
+            }
+
             if (blurAmount > 0) {
                 ctx.filter = `blur(${blurAmount}px)`;
                 ctx.globalAlpha = Math.max(0.2, 1 - blurAmount/10);
@@ -763,10 +767,11 @@
                 let imgAbsX = cx + actualV;
                 let magnification = -actualV / apparentDist; 
                 let imgHeight = (objHeight * glassMagnification) * Math.abs(magnification);
+                let isInverted = magnification < 0; // 放大率為負表示成倒立像
                 
                 // 在實際匯聚點畫一個淡淡的虛擬像 (幫助理解)
                 if (Math.abs(defocusDist) > 5) {
-                    drawCandle(ctx, imgAbsX, cy, imgHeight, true, 0);
+                    drawCandle(ctx, imgAbsX, cy, imgHeight, true, 0, isInverted);
                     // 畫一條虛線指示這是「實際成像面」
                     ctx.beginPath();
                     ctx.moveTo(imgAbsX, cy - 80);
@@ -780,8 +785,9 @@
                 // 在視網膜上畫出最終接收到的影像 (如果有散焦，影像會模糊)
                 let retinaMag = -retinaDist / apparentDist;
                 let retinaImgHeight = (objHeight * glassMagnification) * Math.abs(retinaMag);
+                let isRetinaInverted = retinaMag < 0;
                 
-                drawCandle(ctx, cx + retinaDist, cy, retinaImgHeight, false, blurRadius);
+                drawCandle(ctx, cx + retinaDist, cy, retinaImgHeight, false, blurRadius, isRetinaInverted);
             }
         }
 
