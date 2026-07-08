@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动能定理与动量守恒演示</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.9);
+            --text-light: #f8fafc;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Canvas Container */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Title Area */
+        #title-area {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            background: var(--panel-bg);
+            padding: 10px 30px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+        h1 { margin: 0; font-size: 24px; color: var(--accent-blue); }
+        .subtitle { font-size: 14px; color: #94a3b8; margin-top: 4px; }
+
+        /* Left Dashboard - Momentum & Energy */
+        #data-dashboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            pointer-events: none;
+            width: 280px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+        
+        .dashboard-section { margin-bottom: 15px; }
+        .dashboard-section:last-child { margin-bottom: 0; }
+        .dashboard-title { 
+            font-size: 16px; 
+            font-weight: bold; 
+            margin-bottom: 10px; 
+            color: #e2e8f0;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+        
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .val-num { font-family: monospace; font-weight: bold; }
+        .color-a { color: var(--accent-blue); }
+        .color-b { color: var(--accent-red); }
+        .color-sys { color: var(--accent-yellow); }
+
+        /* Right Control Panel */
+        #control-panel {
+            width: 320px;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        
+        h2 { font-size: 18px; margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); color: #cbd5e1;}
+        
+        .control-group { margin-bottom: 20px; }
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent-blue);
+        }
+        
+        .btn-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        button {
+            flex: 1;
+            padding: 10px 12px;
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        button:hover { background-color: #2563eb; }
+        button#btn-reset { background-color: #475569; }
+        button#btn-reset:hover { background-color: #334155; }
+        button.active-btn { background-color: var(--accent-yellow); color: #000; }
+
+        /* Formula Info Box */
+        .info-box {
+            background: rgba(0,0,0,0.4);
+            border-radius: 6px;
+            padding: 15px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-top: auto;
+            color: #cbd5e1;
+            border: 1px dashed var(--border-color);
+        }
+        .math { font-family: 'Times New Roman', Times, serif; font-style: italic; }
+        .highlight { color: var(--accent-yellow); font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="simCanvas"></canvas>
+        
+        <!-- Title -->
+        <div id="title-area">
+            <h1 id="main-title">从动能定理到动量守恒</h1>
+            <div class="subtitle">一维水平轨道碰撞演示</div>
+        </div>
+
+        <!-- Left Dashboard -->
+        <div id="data-dashboard">
+            <!-- Work-Energy Theorem Data -->
+            <div class="dashboard-section" id="section-work">
+                <div class="dashboard-title">动能定理 (加速阶段)</div>
+                <div class="data-row">
+                    <span>拉力做的功 <span class="math">W = F·x</span></span>
+                    <span class="val-num color-a"><span id="val-W">0.00</span> J</span>
+                </div>
+                <div class="data-row">
+                    <span>滑块A动能增量 <span class="math">ΔE<sub>k</sub></span></span>
+                    <span class="val-num color-a"><span id="val-Ek-A">0.00</span> J</span>
+                </div>
+                <div class="data-row" style="margin-top: 5px; font-size: 12px; color: #94a3b8;">
+                    <i>(证明：合外力做功等于动能变化量)</i>
+                </div>
+            </div>
+
+            <!-- Momentum Conservation Data -->
+            <div class="dashboard-section">
+                <div class="dashboard-title">动量 (p = mv)</div>
+                <div class="data-row">
+                    <span>滑块 A 动量 <span class="math">p<sub>A</sub></span></span>
+                    <span class="val-num color-a"><span id="val-pA">0.00</span> kg·m/s</span>
+                </div>
+                <div class="data-row">
+                    <span>滑块 B 动量 <span class="math">p<sub>B</sub></span></span>
+                    <span class="val-num color-b"><span id="val-pB">0.00</span> kg·m/s</span>
+                </div>
+                <div class="data-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px; margin-top: 5px;">
+                    <span>系统总动量 <span class="math">p<sub>总</sub></span></span>
+                    <span class="val-num color-sys"><span id="val-pTotal">0.00</span> kg·m/s</span>
+                </div>
+            </div>
+
+            <!-- Kinetic Energy Data -->
+            <div class="dashboard-section">
+                <div class="dashboard-title">系统动能 (E<sub>k</sub> = ½mv²)</div>
+                <div class="data-row">
+                    <span>碰撞前总动能</span>
+                    <span class="val-num"><span id="val-E-before">0.00</span> J</span>
+                </div>
+                <div class="data-row">
+                    <span>当前总动能</span>
+                    <span class="val-num color-sys"><span id="val-E-current">0.00</span> J</span>
+                </div>
+                <div class="data-row">
+                    <span>动能损失 <span class="math">ΔE</span></span>
+                    <span class="val-num" style="color: #f87171;"><span id="val-E-loss">0.00</span> J</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Control Panel -->
+    <div id="control-panel">
+        <h2>物理参数 (Parameters)</h2>
+        
+        <!-- Force -->
+        <div class="control-group">
+            <div class="control-label">
+                <span style="color: var(--accent-blue);">拉力 <span class="math">F</span> (Force on A)</span>
+                <span id="label-f">20 N</span>
+            </div>
+            <input type="range" id="slider-f" min="0" max="50" step="1" value="20">
+            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">* 仅在加速区(虚线左侧)生效，用于演示做功。</div>
+        </div>
+
+        <!-- Mass A -->
+        <div class="control-group">
+            <div class="control-label">
+                <span style="color: var(--accent-blue);">滑块 A 质量 <span class="math">m<sub>A</sub></span></span>
+                <span id="label-ma">2.0 kg</span>
+            </div>
+            <input type="range" id="slider-ma" min="1.0" max="5.0" step="0.5" value="2.0">
+        </div>
+
+        <!-- Mass B -->
+        <div class="control-group">
+            <div class="control-label">
+                <span style="color: var(--accent-red);">滑块 B 质量 <span class="math">m<sub>B</sub></span></span>
+                <span id="label-mb">2.0 kg</span>
+            </div>
+            <input type="range" id="slider-mb" min="1.0" max="5.0" step="0.5" value="2.0">
+        </div>
+
+        <!-- Restitution -->
+        <div class="control-group">
+            <div class="control-label">
+                <span>恢复系数 <span class="math">e</span> (Restitution)</span>
+                <span id="label-e">1.00</span>
+            </div>
+            <input type="range" id="slider-e" min="0" max="1" step="0.1" value="1.0">
+            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                e=1: 完全弹性碰撞 (动能守恒)<br>
+                e=0: 完全非弹性碰撞 (粘连，动能损失最大)
+            </div>
+        </div>
+
+        <h2>模拟控制 (Simulation)</h2>
+        <div class="btn-group">
+            <button id="btn-play">开始实验</button>
+            <button id="btn-reset">重置</button>
+        </div>
+
+        <!-- Formula Note -->
+        <div class="info-box">
+            <b>核心物理规律板书：</b><br><br>
+            1. <b>动能定理</b> (做功转化为动能)：<br>
+            &nbsp;&nbsp;&nbsp;<span class="math highlight">W = F·x = ½m<sub>A</sub>v<sub>A</sub>² - 0</span><br><br>
+            2. <b>动量守恒定律</b> (系统不受外力时)：<br>
+            &nbsp;&nbsp;&nbsp;<span class="math highlight">m<sub>A</sub>v<sub>A</sub> + m<sub>B</sub>v<sub>B</sub> = m<sub>A</sub>v<sub>A</sub>' + m<sub>B</sub>v<sub>B</sub>'</span><br><br>
+            3. <b>恢复系数与速度关系</b>：<br>
+            &nbsp;&nbsp;&nbsp;<span class="math">e = (v<sub>B</sub>' - v<sub>A</sub>') / (v<sub>A</sub> - v<sub>B</sub>)</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Elements - Dashboards
+        const valW = document.getElementById('val-W');
+        const valEkA = document.getElementById('val-Ek-A');
+        const valPA = document.getElementById('val-pA');
+        const valPB = document.getElementById('val-pB');
+        const valPTotal = document.getElementById('val-pTotal');
+        const valEBefore = document.getElementById('val-E-before');
+        const valECurrent = document.getElementById('val-E-current');
+        const valELoss = document.getElementById('val-E-loss');
+
+        // UI Elements - Controls
+        const sliderF = document.getElementById('slider-f');
+        const sliderMA = document.getElementById('slider-ma');
+        const sliderMB = document.getElementById('slider-mb');
+        const sliderE = document.getElementById('slider-e');
+        const btnPlay = document.getElementById('btn-play');
+        const btnReset = document.getElementById('btn-reset');
+
+        // Canvas / Rendering Parameters
+        let cw, ch;
+        let scale = 100; // 1 meter = 100 pixels
+        let groundY;     // Y position of the track
+
+        // Physics State Variables
+        let isPlaying = false;
+        let t = 0;
+        const dt = 1/60; // Fixed time step for physics (approx 60 FPS)
+        
+        let state = "IDLE"; // IDLE, ACCELERATING, COASTING, COLLIDED, DONE
+
+        // Environment constants
+        const startX_m = 1.0;     // Initial position of A (meters)
+        const forceEnd_m = 4.0;   // Position where force is removed (meters)
+        const blockBx_m = 7.0;    // Initial position of B (meters)
+
+        // Block Objects
+        let blockA = { x: startX_m, v: 0, m: 2.0, w: 0.8, color: '#3b82f6' };
+        let blockB = { x: blockBx_m, v: 0, m: 2.0, w: 0.8, color: '#ef4444' };
+        
+        // System Parameters
+        let forceF = 20; 
+        let restCoef = 1.0;
+        
+        // Measurement Variables
+        let workDone = 0;
+        let initialSysEnergy = 0; // Energy right before collision
+        let collisionHappened = false;
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            cw = canvas.width;
+            ch = canvas.height;
+            groundY = ch * 0.7; // Track is slightly below middle
+            
+            // Adjust visual width of blocks based on mass later, base size is 80px (0.8m)
+            draw();
+        }
+        window.addEventListener('resize', resize);
+        
+        function updateParams() {
+            forceF = parseFloat(sliderF.value);
+            blockA.m = parseFloat(sliderMA.value);
+            blockB.m = parseFloat(sliderMB.value);
+            restCoef = parseFloat(sliderE.value);
+            
+            document.getElementById('label-f').innerText = forceF.toFixed(0) + ' N';
+            document.getElementById('label-ma').innerText = blockA.m.toFixed(1) + ' kg';
+            document.getElementById('label-mb').innerText = blockB.m.toFixed(1) + ' kg';
+            document.getElementById('label-e').innerText = restCoef.toFixed(2);
+            
+            // Update visual size based on mass (cubic root mapping for visual area logic)
+            blockA.w = 0.5 + Math.pow(blockA.m, 0.33) * 0.3;
+            blockB.w = 0.5 + Math.pow(blockB.m, 0.33) * 0.3;
+
+            // Only allow param updates when idle
+            if(state === "IDLE") draw(); 
+        }
+
+        // Attach listeners
+        sliderF.addEventListener('input', updateParams);
+        sliderMA.addEventListener('input', updateParams);
+        sliderMB.addEventListener('input', updateParams);
+        sliderE.addEventListener('input', updateParams);
+
+        btnPlay.addEventListener('click', () => {
+            if (state === "DONE") {
+                resetSim(); // If finished and user clicks play, act like restart
+            }
+            isPlaying = !isPlaying;
+            btnPlay.innerText = isPlaying ? '暂停实验' : '继续实验';
+            btnPlay.classList.toggle('active-btn', !isPlaying);
+            if(state === "IDLE") state = "ACCELERATING";
+        });
+
+        btnReset.addEventListener('click', resetSim);
+
+        function resetSim() {
+            isPlaying = false;
+            btnPlay.innerText = '开始实验';
+            btnPlay.classList.remove('active-btn');
+            
+            state = "IDLE";
+            t = 0;
+            blockA.x = startX_m; blockA.v = 0;
+            blockB.x = blockBx_m; blockB.v = 0;
+            
+            workDone = 0;
+            collisionHappened = false;
+            initialSysEnergy = 0;
+            
+            // Re-enable sliders
+            sliderF.disabled = false;
+            sliderMA.disabled = false;
+            sliderMB.disabled = false;
+            
+            updateParams();
+            updateDashboard();
+            draw();
+        }
+
+        function physicsStep() {
+            if (!isPlaying) return;
+            
+            t += dt;
+
+            // 1. Acceleration Phase (Work-Energy Theorem)
+            if (state === "ACCELERATING") {
+                // F = ma -> a = F/m
+                let a = forceF / blockA.m;
+                // v = v0 + at, x = x0 + v0t + 1/2at^2 (Euler integration for simplicity and frame-by-frame)
+                blockA.v += a * dt;
+                blockA.x += blockA.v * dt;
+                
+                workDone = forceF * (blockA.x - startX_m);
+
+                if (blockA.x >= forceEnd_m) {
+                    state = "COASTING";
+                    // Lock sliders to prevent cheating mid-simulation
+                    sliderF.disabled = true;
+                    sliderMA.disabled = true;
+                    sliderMB.disabled = true;
+                }
+            }
+            
+            // 2. Coasting Phase
+            else if (state === "COASTING") {
+                blockA.x += blockA.v * dt;
+                
+                // Detect collision: distance between centers <= sum of half widths
+                if (Math.abs(blockB.x - blockA.x) <= (blockA.w + blockB.w) / 2) {
+                    performCollision();
+                }
+            }
+            
+            // 3. Post-Collision Phase
+            else if (state === "COLLIDED") {
+                blockA.x += blockA.v * dt;
+                blockB.x += blockB.v * dt;
+                
+                // End simulation when blocks go off screen right
+                if (blockA.x > (cw/scale) + 2 && blockB.x > (cw/scale) + 2) {
+                    state = "DONE";
+                    isPlaying = false;
+                    btnPlay.innerText = '实验结束';
+                }
+            }
+        }
+
+        function performCollision() {
+            state = "COLLIDED";
+            collisionHappened = true;
+            
+            // Record energy before collision for the UI
+            initialSysEnergy = 0.5 * blockA.m * blockA.v * blockA.v + 0.5 * blockB.m * blockB.v * blockB.v;
+
+            // Variables before
+            let m1 = blockA.m, v1 = blockA.v;
+            let m2 = blockB.m, v2 = blockB.v;
+            let e = restCoef;
+
+            // Solve 1D collision with restitution coefficient
+            // Momentum: m1*v1 + m2*v2 = m1*v1_new + m2*v2_new
+            // Restitution: e = (v2_new - v1_new) / (v1 - v2)
+            
+            // Derived formulas:
+            // v1_new = (m1*v1 + m2*v2 - m2*e*(v1 - v2)) / (m1 + m2)
+            // v2_new = (m1*v1 + m2*v2 + m1*e*(v1 - v2)) / (m1 + m2)
+            
+            let v1_new = (m1 * v1 + m2 * v2 - m2 * e * (v1 - v2)) / (m1 + m2);
+            let v2_new = (m1 * v1 + m2 * v2 + m1 * e * (v1 - v2)) / (m1 + m2);
+
+            // Apply new velocities
+            blockA.v = v1_new;
+            blockB.v = v2_new;
+
+            // Fix overlap just in case dt step caused them to dig into each other
+            blockB.x = blockA.x + (blockA.w + blockB.w) / 2 + 0.01;
+        }
+
+        function updateDashboard() {
+            // Kinematics & Work
+            valW.innerText = workDone.toFixed(2);
+            
+            let EkA = 0.5 * blockA.m * blockA.v * blockA.v;
+            valEkA.innerText = EkA.toFixed(2);
+
+            // Momentum (p = mv)
+            let pA = blockA.m * blockA.v;
+            let pB = blockB.m * blockB.v;
+            let pTotal = pA + pB;
+
+            valPA.innerText = pA.toFixed(2);
+            valPB.innerText = pB.toFixed(2);
+            valPTotal.innerText = pTotal.toFixed(2);
+
+            // System Energy
+            let EkB = 0.5 * blockB.m * blockB.v * blockB.v;
+            let currentSysE = EkA + EkB;
+            
+            valECurrent.innerText = currentSysE.toFixed(2);
+            
+            if (collisionHappened) {
+                valEBefore.innerText = initialSysEnergy.toFixed(2);
+                let loss = initialSysEnergy - currentSysE;
+                // Handle floating point weirdness where loss might be -0.000000001
+                if (loss < 0.001) loss = 0; 
+                valELoss.innerText = loss.toFixed(2);
+            } else {
+                valEBefore.innerText = currentSysE.toFixed(2);
+                valELoss.innerText = "0.00";
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, cw, ch);
+            
+            // Draw background grid
+            drawGrid();
+
+            // Draw Track
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(cw, groundY);
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Draw track markings
+            for(let i=0; i<15; i++) {
+                let px = i * scale;
+                ctx.beginPath();
+                ctx.moveTo(px, groundY);
+                ctx.lineTo(px, groundY + 10);
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = '12px Arial';
+                ctx.fillText(i + 'm', px + 2, groundY + 25);
+            }
+
+            // Draw Acceleration Zone Line
+            let forceEndX_px = forceEnd_m * scale;
+            ctx.beginPath();
+            ctx.setLineDash([10, 10]);
+            ctx.moveTo(forceEndX_px, groundY - 150);
+            ctx.lineTo(forceEndX_px, groundY);
+            ctx.strokeStyle = 'var(--accent-yellow)';
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.fillStyle = 'var(--accent-yellow)';
+            ctx.font = '14px Arial';
+            ctx.fillText('撤去恒力 F (x=' + forceEnd_m + 'm)', forceEndX_px - 65, groundY - 160);
+
+            // Draw Blocks
+            drawBlock(blockA, 'A');
+            drawBlock(blockB, 'B');
+
+            // Draw Force Vector on A if accelerating
+            if (state === "ACCELERATING") {
+                let aX_px = blockA.x * scale;
+                let aY_px = groundY - (blockA.w * scale) / 2; // middle of block
+                drawArrow(aX_px, aY_px, aX_px + 80, aY_px, 'var(--accent-yellow)', 'F');
+            }
+
+            // Draw Velocity Vectors
+            if (blockA.v > 0) {
+                drawArrow(blockA.x*scale, groundY - blockA.w*scale - 20, (blockA.x + blockA.v*0.5)*scale, groundY - blockA.w*scale - 20, '#10b981', 'vA');
+            }
+            if (blockB.v > 0) {
+                drawArrow(blockB.x*scale, groundY - blockB.w*scale - 20, (blockB.x + blockB.v*0.5)*scale, groundY - blockB.w*scale - 20, '#10b981', 'vB');
+            }
+        }
+
+        function drawGrid() {
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            const step = 50;
+            for(let x = 0; x < cw; x += step) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, ch);
+            }
+            for(let y = 0; y < ch; y += step) {
+                ctx.moveTo(0, y); ctx.lineTo(cw, y);
+            }
+            ctx.stroke();
+        }
+
+        function drawBlock(block, label) {
+            let w_px = block.w * scale;
+            let px = block.x * scale;
+            // Draw box, centered horizontally around block.x, resting on groundY
+            ctx.fillStyle = block.color;
+            // Add a slight gradient or inner shadow for 3D feel
+            ctx.fillRect(px - w_px/2, groundY - w_px, w_px, w_px);
+            
+            // Outline
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px - w_px/2, groundY - w_px, w_px, w_px);
+
+            // Label & Mass text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, px, groundY - w_px/2 + 8);
+            
+            ctx.font = '12px Arial';
+            ctx.fillText(block.m.toFixed(1) + 'kg', px, groundY - w_px/2 + 25);
+            ctx.textAlign = 'left'; // Reset
+        }
+
+        function drawArrow(fromX, fromY, toX, toY, color, label) {
+            const headlen = 10; 
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            const angle = Math.atan2(dy, dx);
+            
+            // Only draw if there's actual length
+            if(Math.sqrt(dx*dx + dy*dy) < 5) return;
+
+            ctx.beginPath();
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Arrow head
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.lineTo(toX, toY);
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            // Label
+            if (label) {
+                ctx.fillStyle = color;
+                ctx.font = 'italic bold 16px Arial';
+                ctx.fillText(label, toX + 5, toY - 5);
+            }
+        }
+
+        let lastTime = 0;
+        function animate(timestamp) {
+            // Using requestAnimationFrame just for timing, physics runs on fixed dt
+            if (isPlaying) {
+                physicsStep();
+                updateDashboard();
+            }
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        // Init
+        resize();
+        updateParams();
+        updateDashboard();
+        requestAnimationFrame(animate);
+
+    </script>
+</body>
+</html>
