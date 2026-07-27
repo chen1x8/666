@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回声测速原理与 s-t 图像演示</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #12161a;
+            color: #ecf0f1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #00cec9;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.4);
+        }
+
+        .header p {
+            color: #bdc3c7;
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            justify-content: center;
+        }
+
+        .visual-area {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        canvas {
+            background-color: #0b0f13;
+            border-radius: 8px;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 15px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .panel {
+            background: rgba(20, 30, 40, 0.85);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+
+        /* 新增单选按钮样式 */
+        .radio-label {
+            font-size: 13px;
+            color: #ecf0f1;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .radio-label input {
+            margin-right: 5px;
+            accent-color: #00cec9;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: #00cec9;
+            cursor: pointer;
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn-primary { background: #0984e3; color: white; }
+        .btn-primary:hover { background: #74b9ff; }
+        .btn-reset { background: #e17055; color: white; }
+        .btn-reset:hover { background: #fab1a0; }
+
+        .dashboard {
+            background: #1e272e;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #00cec9;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13.5px;
+            line-height: 1.6;
+        }
+
+        .dash-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .dash-row.formula {
+            color: #f1c40f;
+            font-weight: bold;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed rgba(255,255,255,0.2);
+            justify-content: center;
+            font-size: 15px;
+        }
+
+        .color-p1 { color: #3498db; font-weight: bold; }
+        .color-p2 { color: #e67e22; font-weight: bold; }
+        .color-car { color: #2ecc71; font-weight: bold; }
+
+        .info-text {
+            font-size: 13px;
+            color: #bdc3c7;
+            line-height: 1.6;
+        }
+
+        .highlight { color: #f1c40f; }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>📡 回声测速 s-t 图像演示</h1>
+        <p>通过发射两次声波脉冲，利用回声的时间差计算物体的移动速度</p>
+    </div>
+
+    <div class="main-container">
+        <!-- 左侧：可视化区域 -->
+        <div class="visual-area">
+            <!-- 动画画布 (雷达与车) -->
+            <canvas id="animCanvas" width="800" height="150"></canvas>
+            <!-- 图表画布 (s-t 图像) -->
+            <canvas id="graphCanvas" width="800" height="400"></canvas>
+        </div>
+
+        <!-- 右侧：控制面板 -->
+        <div class="panel">
+            <div class="control-group">
+                <label>
+                    <span>🚗 初始距离 (X0):</span>
+                    <span id="x0Display">400 m</span>
+                </label>
+                <input type="range" id="x0Slider" min="100" max="900" step="10" value="400">
+            </div>
+
+            <div class="control-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: bold; color: #ecf0f1;">↔️ 运动方向:</span>
+                    <div style="display: flex; gap: 10px;">
+                        <label class="radio-label"><input type="radio" name="direction" value="away" checked> 远离雷达</label>
+                        <label class="radio-label"><input type="radio" name="direction" value="towards"> 靠近雷达</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span>🚗 汽车速度 (Vc):</span>
+                    <span id="vcDisplay">20 m/s</span>
+                </label>
+                <input type="range" id="vcSlider" min="5" max="80" value="20">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span>⏱️ 发射间隔 (ΔT):</span>
+                    <span id="dtDisplay">1.0 s</span>
+                </label>
+                <input type="range" id="dtSlider" min="0.5" max="3.0" step="0.1" value="1.0">
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button id="btnPlay" class="btn btn-primary" style="flex: 2;">▶️ 开始 / 暂停</button>
+                <button id="btnReset" class="btn btn-reset" style="flex: 1;">🔄 重置</button>
+            </div>
+
+            <div class="dashboard">
+                <div style="color:#bdc3c7; font-weight:bold; margin-bottom:8px;">📊 测速计算机 (雷达端)</div>
+                <div class="dash-row"><span>声速 (Vs):</span> <span>340 m/s</span></div>
+                <div class="dash-row"><span>脉冲 1 发射:</span> <span class="color-p1">t = 0.00 s</span></div>
+                <div class="dash-row"><span>脉冲 1 接收 (t1):</span> <span id="dash-t1" class="color-p1">- s</span></div>
+                <div class="dash-row"><span>脉冲 2 发射 (ΔT):</span> <span id="dash-dt" class="color-p2">- s</span></div>
+                <div class="dash-row"><span>脉冲 2 接收 (t2):</span> <span id="dash-t2" class="color-p2">- s</span></div>
+                
+                <div class="dash-row formula">计算速度: <span id="dash-calc-v">等待回声...</span></div>
+            </div>
+
+            <div class="info-text">
+                <strong>💡 核心物理公式推导：</strong><br><br>
+                1. 汽车在第一次相遇时的距离：<br>
+                <span style="font-family: monospace;">s1 = Vs * (t1 / 2)</span><br><br>
+                2. 汽车在第二次相遇时的距离：<br>
+                <span style="font-family: monospace;">s2 = Vs * ((t2 - ΔT) / 2)</span><br><br>
+                3. 汽车在这两点之间行驶的时间：<br>
+                <span style="font-family: monospace;">Δt_car = t_遇2 - t_遇1</span><br>
+                <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (t2 + ΔT)/2 - t1/2</span><br><br>
+                4. 汽车速度：<br>
+                <span class="highlight" style="font-weight:bold; font-size:14px;">Vc = (s2 - s1) / Δt_car</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const animCanvas = document.getElementById('animCanvas');
+        const animCtx = animCanvas.getContext('2d');
+        const graphCanvas = document.getElementById('graphCanvas');
+        const graphCtx = graphCanvas.getContext('2d');
+
+        // UI 元素
+        const x0Slider = document.getElementById('x0Slider');
+        const x0Display = document.getElementById('x0Display');
+        const dirRadios = document.getElementsByName('direction');
+        const vcSlider = document.getElementById('vcSlider');
+        const dtSlider = document.getElementById('dtSlider');
+        const vcDisplay = document.getElementById('vcDisplay');
+        const dtDisplay = document.getElementById('dtDisplay');
+        const btnPlay = document.getElementById('btnPlay');
+        const btnReset = document.getElementById('btnReset');
+
+        // 数据面板
+        const dashT1 = document.getElementById('dash-t1');
+        const dashDt = document.getElementById('dash-dt');
+        const dashT2 = document.getElementById('dash-t2');
+        const dashCalcV = document.getElementById('dash-calc-v');
+
+        // 物理常量与变量
+        const Vs = 340; // 声速 m/s
+        let X0 = parseInt(x0Slider.value); // 汽车初始距离 m
+        let Vc_mag = parseInt(vcSlider.value); // 汽车速度大小
+        let dir = 1; // 方向因子: 1为远离, -1为靠近
+        let Vc = Vc_mag * dir; // 汽车实际速度矢量
+        let deltaT = parseFloat(dtSlider.value); // 脉冲间隔
+        
+        let t = 0; // 当前模拟时间
+        let isRunning = false;
+        let lastTime = 0;
+
+        // 动态坐标系映射参数
+        let MAX_TIME = 6;
+        let MAX_DIST = 1000;
+        let MIN_DIST = 0;
+        
+        function mapX(time) { return (time / MAX_TIME) * graphCanvas.width; }
+        function mapY(dist) { return graphCanvas.height - ((dist - MIN_DIST) / (MAX_DIST - MIN_DIST)) * graphCanvas.height; }
+        function mapAnimX(dist) { return 50 + ((dist - MIN_DIST) / (MAX_DIST - MIN_DIST)) * (animCanvas.width - 100); }
+
+        // 关键事件时间点预计算
+        let events = {};
+
+        function calculateEvents() {
+            X0 = parseInt(x0Slider.value);
+            Vc_mag = parseInt(vcSlider.value);
+            
+            // 获取方向
+            let checkedDir = Array.from(dirRadios).find(r => r.checked).value;
+            dir = checkedDir === 'away' ? 1 : -1;
+            Vc = Vc_mag * dir;
+            
+            deltaT = parseFloat(dtSlider.value);
+
+            // 如果是靠近雷达，要保证第二次回声收到时，汽车还没撞上雷达 (距离 > 0)
+            // 安全限制：限制 deltaT 不超过汽车到达雷达时间的 60%
+            if (dir === -1) {
+                let maxSafeDt = (X0 / Math.abs(Vc)) * 0.6;
+                if (deltaT > maxSafeDt) {
+                    deltaT = maxSafeDt;
+                    dashDt.textContent = deltaT.toFixed(2) + " s (受距离限制)";
+                } else {
+                    dashDt.textContent = deltaT.toFixed(2) + " s";
+                }
+            } else {
+                dashDt.textContent = deltaT.toFixed(2) + " s";
+            }
+
+            // 脉冲1
+            let t_meet1 = X0 / (Vs - Vc);
+            let t_return1 = 2 * t_meet1; // 接收到回声1的时间
+            let s_meet1 = X0 + Vc * t_meet1;
+
+            // 脉冲2
+            let t_meet2 = (X0 + Vs * deltaT) / (Vs - Vc);
+            let t_return2 = 2 * t_meet2 - deltaT; // 接收到回声2的时间
+            let s_meet2 = X0 + Vc * t_meet2;
+
+            // 动态计算坐标系边界，让图像始终充分利用画布
+            MAX_TIME = Math.ceil(t_return2 + 0.5);
+            if (MAX_TIME < 3) MAX_TIME = 3;
+
+            let max_s = Math.max(X0, s_meet1, s_meet2, X0 + Vc * MAX_TIME);
+            MAX_DIST = Math.ceil((max_s * 1.1) / 100) * 100;
+            if (MAX_DIST < 200) MAX_DIST = 200;
+            
+            let min_s = Math.min(0, X0, s_meet1, s_meet2, X0 + Vc * MAX_TIME);
+            MIN_DIST = Math.floor((min_s * 1.1) / 100) * 100;
+            if (MIN_DIST > 0) MIN_DIST = 0; // 始终让 0 刻度在图内
+
+            events = {
+                t_meet1: t_meet1,
+                t_return1: t_return1,
+                s_meet1: s_meet1,
+                t_emit2: deltaT,
+                t_meet2: t_meet2,
+                t_return2: t_return2,
+                s_meet2: s_meet2
+            };
+
+            // 更新仪表盘初始状态
+            dashT1.textContent = "- s";
+            dashT2.textContent = "- s";
+            dashCalcV.textContent = "等待回声...";
+            dashCalcV.style.color = "#f1c40f";
+        }
+
+        x0Slider.addEventListener('input', (e) => {
+            x0Display.textContent = e.target.value + " m";
+            if(!isRunning && t === 0) calculateEvents();
+        });
+
+        dirRadios.forEach(r => r.addEventListener('change', () => {
+            if(!isRunning && t === 0) calculateEvents();
+        }));
+
+        vcSlider.addEventListener('input', (e) => {
+            vcDisplay.textContent = e.target.value + " m/s";
+            if(!isRunning && t === 0) calculateEvents();
+        });
+
+        dtSlider.addEventListener('input', (e) => {
+            dtDisplay.textContent = parseFloat(e.target.value).toFixed(1) + " s";
+            if(!isRunning && t === 0) calculateEvents();
+        });
+
+        btnPlay.addEventListener('click', () => {
+            if (t >= events.t_return2 + 0.5) {
+                // 如果已经播完，点击重置并播放
+                resetSimulation();
+            }
+            isRunning = !isRunning;
+            btnPlay.textContent = isRunning ? "⏸️ 暂停" : "▶️ 继续";
+            if (isRunning) lastTime = performance.now();
+        });
+
+        btnReset.addEventListener('click', () => {
+            resetSimulation();
+        });
+
+        function resetSimulation() {
+            isRunning = false;
+            t = 0;
+            btnPlay.textContent = "▶️ 开始";
+            calculateEvents();
+            drawAnim();
+            drawGraph();
+        }
+
+        function drawGraph() {
+            graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+            
+            // 绘制网格和坐标轴
+            graphCtx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+            graphCtx.lineWidth = 1;
+            graphCtx.beginPath();
+            
+            // 根据 MAX_TIME 动态决定网格竖线步长
+            let tStep = MAX_TIME > 15 ? 5 : (MAX_TIME > 6 ? 2 : 1);
+            for(let i=0; i<=MAX_TIME; i+=tStep) { // 竖线 (时间)
+                let px = mapX(i);
+                graphCtx.moveTo(px, 0); graphCtx.lineTo(px, graphCanvas.height);
+            }
+            
+            // 根据 MAX_DIST 动态决定网格横线步长
+            let dRange = MAX_DIST - MIN_DIST;
+            let dStep = dRange > 1500 ? 500 : (dRange > 800 ? 200 : 100);
+            for(let i=MIN_DIST; i<=MAX_DIST; i+=dStep) { // 横线 (距离)
+                let py = mapY(i);
+                graphCtx.moveTo(0, py); graphCtx.lineTo(graphCanvas.width, py);
+                graphCtx.fillStyle = "rgba(255,255,255,0.4)";
+                graphCtx.font = "10px Arial";
+                graphCtx.fillText(i + "m", 5, py - 2);
+            }
+            graphCtx.stroke();
+            
+            // 绘制0米基准粗线 (如果包含0)
+            if (MIN_DIST <= 0 && MAX_DIST >= 0) {
+                let zeroY = mapY(0);
+                graphCtx.beginPath();
+                graphCtx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+                graphCtx.lineWidth = 2;
+                graphCtx.moveTo(0, zeroY); graphCtx.lineTo(graphCanvas.width, zeroY);
+                graphCtx.stroke();
+            }
+
+            // X轴刻度文字
+            graphCtx.fillStyle = "rgba(255,255,255,0.7)";
+            for(let i=tStep; i<=MAX_TIME; i+=tStep) {
+                graphCtx.fillText(i + "s", mapX(i) - 10, graphCanvas.height - 5);
+            }
+
+            // 1. 绘制汽车的 s-t 图像 (绿线)
+            graphCtx.strokeStyle = "#2ecc71";
+            graphCtx.lineWidth = 3;
+            graphCtx.beginPath();
+            graphCtx.moveTo(mapX(0), mapY(X0));
+            // 汽车当前时间 (限制在当前 t)
+            let currentCarT = t;
+            graphCtx.lineTo(mapX(currentCarT), mapY(X0 + Vc * currentCarT));
+            graphCtx.stroke();
+
+            // 2. 绘制脉冲 1 的 s-t 图像 (蓝线)
+            graphCtx.strokeStyle = "#3498db";
+            graphCtx.lineWidth = 2;
+            graphCtx.beginPath();
+            graphCtx.moveTo(mapX(0), mapY(0));
+            if (t < events.t_meet1) {
+                // 发射中
+                graphCtx.lineTo(mapX(t), mapY(Vs * t));
+            } else {
+                // 已反射
+                graphCtx.lineTo(mapX(events.t_meet1), mapY(events.s_meet1));
+                if (t < events.t_return1) {
+                    graphCtx.lineTo(mapX(t), mapY(events.s_meet1 - Vs * (t - events.t_meet1)));
+                } else {
+                    graphCtx.lineTo(mapX(events.t_return1), mapY(0));
+                }
+            }
+            graphCtx.stroke();
+
+            // 3. 绘制脉冲 2 的 s-t 图像 (橙线)
+            if (t > events.t_emit2) {
+                graphCtx.strokeStyle = "#e67e22";
+                graphCtx.lineWidth = 2;
+                graphCtx.beginPath();
+                graphCtx.moveTo(mapX(events.t_emit2), mapY(0));
+                
+                if (t < events.t_meet2) {
+                    // 发射中
+                    graphCtx.lineTo(mapX(t), mapY(Vs * (t - events.t_emit2)));
+                } else {
+                    // 已反射
+                    graphCtx.lineTo(mapX(events.t_meet2), mapY(events.s_meet2));
+                    if (t < events.t_return2) {
+                        graphCtx.lineTo(mapX(t), mapY(events.s_meet2 - Vs * (t - events.t_meet2)));
+                    } else {
+                        graphCtx.lineTo(mapX(events.t_return2), mapY(0));
+                    }
+                }
+                graphCtx.stroke();
+            }
+
+            // 绘制关键交点辅助线 (虚线)
+            graphCtx.setLineDash([4, 4]);
+            graphCtx.lineWidth = 1;
+            
+            // 交点 1
+            if (t >= events.t_meet1) {
+                graphCtx.strokeStyle = "rgba(52, 152, 219, 0.5)";
+                graphCtx.beginPath();
+                graphCtx.moveTo(mapX(events.t_meet1), mapY(0));
+                graphCtx.lineTo(mapX(events.t_meet1), mapY(events.s_meet1));
+                graphCtx.lineTo(mapX(0), mapY(events.s_meet1));
+                graphCtx.stroke();
+                
+                graphCtx.fillStyle = "#3498db";
+                graphCtx.beginPath(); graphCtx.arc(mapX(events.t_meet1), mapY(events.s_meet1), 4, 0, Math.PI*2); graphCtx.fill();
+            }
+            
+            // 交点 2
+            if (t >= events.t_meet2) {
+                graphCtx.strokeStyle = "rgba(230, 126, 34, 0.5)";
+                graphCtx.beginPath();
+                graphCtx.moveTo(mapX(events.t_meet2), mapY(0));
+                graphCtx.lineTo(mapX(events.t_meet2), mapY(events.s_meet2));
+                graphCtx.lineTo(mapX(0), mapY(events.s_meet2));
+                graphCtx.stroke();
+                
+                graphCtx.fillStyle = "#e67e22";
+                graphCtx.beginPath(); graphCtx.arc(mapX(events.t_meet2), mapY(events.s_meet2), 4, 0, Math.PI*2); graphCtx.fill();
+            }
+            
+            graphCtx.setLineDash([]);
+        }
+
+        function drawAnim() {
+            animCtx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+
+            const yCenter = animCanvas.height / 2;
+
+            // 画一条马路基准线
+            animCtx.strokeStyle = "#34495e";
+            animCtx.lineWidth = 2;
+            animCtx.beginPath();
+            animCtx.moveTo(0, yCenter + 20);
+            animCtx.lineTo(animCanvas.width, yCenter + 20);
+            animCtx.stroke();
+
+            // 画雷达站 (X=0 对应 mapAnimX(0))
+            const radarX = mapAnimX(0);
+            animCtx.fillStyle = "#7f8c8d";
+            animCtx.fillRect(radarX - 10, yCenter - 30, 20, 50);
+            animCtx.beginPath(); animCtx.arc(radarX, yCenter - 30, 15, Math.PI, 0); animCtx.fill();
+            animCtx.fillStyle = "#ecf0f1";
+            animCtx.font = "12px Arial";
+            animCtx.fillText("雷达", radarX - 12, yCenter + 40);
+
+            // 计算汽车当前距离并绘制汽车
+            let carDist = X0 + Vc * t;
+            let carX = mapAnimX(carDist);
+            
+            animCtx.fillStyle = "#2ecc71";
+            animCtx.fillRect(carX - 25, yCenter - 15, 50, 30); // 车身
+            animCtx.fillStyle = "#27ae60";
+            
+            // 根据运动方向调整车顶位置，让车看起来有方向感
+            if (dir === 1) {
+                animCtx.fillRect(carX - 5, yCenter - 25, 20, 10); // 车顶 (偏右)
+            } else {
+                animCtx.fillRect(carX - 15, yCenter - 25, 20, 10); // 车顶 (偏左)
+            }
+            
+            // 车轮
+            animCtx.fillStyle = "#222";
+            animCtx.beginPath(); animCtx.arc(carX - 15, yCenter + 15, 6, 0, Math.PI*2); animCtx.fill();
+            animCtx.beginPath(); animCtx.arc(carX + 15, yCenter + 15, 6, 0, Math.PI*2); animCtx.fill();
+            
+            animCtx.fillStyle = "#2ecc71";
+            animCtx.fillText(`V = ${Math.abs(Vc)} m/s`, carX - 25, yCenter - 35);
+
+            // 画声波 1 (蓝)
+            if (t > 0 && t < events.t_return1) {
+                let waveDist, waveRadius, isForward;
+                if (t <= events.t_meet1) {
+                    waveDist = Vs * t;
+                    waveRadius = waveDist;
+                    isForward = true;
+                } else {
+                    let travelBack = Vs * (t - events.t_meet1);
+                    waveDist = events.s_meet1 - travelBack;
+                    waveRadius = travelBack;
+                    isForward = false;
+                }
+                
+                let wX = mapAnimX(waveDist);
+                animCtx.strokeStyle = "#3498db";
+                animCtx.lineWidth = 3;
+                animCtx.shadowBlur = 10;
+                animCtx.shadowColor = "#3498db";
+                animCtx.beginPath();
+                if (isForward) {
+                    animCtx.arc(wX, yCenter, 30, -Math.PI/3, Math.PI/3); // 向右的弧
+                } else {
+                    animCtx.arc(wX, yCenter, 30, Math.PI - Math.PI/3, Math.PI + Math.PI/3); // 向左的弧
+                }
+                animCtx.stroke();
+                animCtx.shadowBlur = 0; // 重置
+            }
+
+            // 画声波 2 (橙)
+            if (t > events.t_emit2 && t < events.t_return2) {
+                let waveDist, waveRadius, isForward;
+                if (t <= events.t_meet2) {
+                    waveDist = Vs * (t - events.t_emit2);
+                    waveRadius = waveDist;
+                    isForward = true;
+                } else {
+                    let travelBack = Vs * (t - events.t_meet2);
+                    waveDist = events.s_meet2 - travelBack;
+                    waveRadius = travelBack;
+                    isForward = false;
+                }
+                
+                let wX = mapAnimX(waveDist);
+                animCtx.strokeStyle = "#e67e22";
+                animCtx.lineWidth = 3;
+                animCtx.shadowBlur = 10;
+                animCtx.shadowColor = "#e67e22";
+                animCtx.beginPath();
+                if (isForward) {
+                    animCtx.arc(wX, yCenter, 40, -Math.PI/4, Math.PI/4);
+                } else {
+                    animCtx.arc(wX, yCenter, 40, Math.PI - Math.PI/4, Math.PI + Math.PI/4);
+                }
+                animCtx.stroke();
+                animCtx.shadowBlur = 0;
+            }
+        }
+
+        function updateDashboard() {
+            if (t >= events.t_return1 && dashT1.textContent === "- s") {
+                dashT1.textContent = events.t_return1.toFixed(3) + " s";
+            }
+            if (t >= events.t_return2 && dashT2.textContent === "- s") {
+                dashT2.textContent = events.t_return2.toFixed(3) + " s";
+                
+                // 进行最终速度计算展示
+                let t1 = events.t_return1;
+                let t2 = events.t_return2;
+                let s1 = Vs * (t1 / 2);
+                let s2 = Vs * ((t2 - deltaT) / 2);
+                let t_car = (t2 + deltaT) / 2 - (t1 / 2);
+                let calcV = (s2 - s1) / t_car;
+                
+                let dirText = calcV >= 0 ? "远离" : "靠近";
+                dashCalcV.textContent = `${Math.abs(calcV).toFixed(1)} m/s (${dirText})`;
+                dashCalcV.style.color = "#2ecc71"; // 计算成功变绿
+            }
+        }
+
+        function loop(timestamp) {
+            if (isRunning) {
+                let dt = (timestamp - lastTime) / 1000;
+                lastTime = timestamp;
+                
+                // 限制最大步长防止切换标签页导致的跳跃
+                if (dt > 0.1) dt = 0.1;
+                
+                // 时间流速调整：为了观赏体验，设定真实1秒 = 模拟1秒 (因为最高6秒结束)
+                t += dt;
+
+                updateDashboard();
+
+                // 自动停止
+                if (t >= events.t_return2 + 0.5) {
+                    isRunning = false;
+                    t = events.t_return2 + 0.5; // 定格在完成状态
+                    btnPlay.textContent = "🔄 重新播放";
+                }
+            }
+
+            drawAnim();
+            drawGraph();
+            
+            requestAnimationFrame(loop);
+        }
+
+        // 初始化
+        calculateEvents();
+        drawAnim();
+        drawGraph();
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
