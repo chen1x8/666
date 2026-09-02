@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电阻网格求解辅助课件</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-color: #f8fafc;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background-color: #020617;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        /* 控制面板样式 */
+        #control-panel {
+            width: 320px;
+            background-color: var(--panel-bg);
+            padding: 20px;
+            box-sizing: border-box;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+        h2 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: #60a5fa;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 10px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .control-group label {
+            font-size: 0.9rem;
+            color: #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+        }
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+        }
+        /* 数据看板 */
+        #dashboard {
+            margin-top: 10px;
+            background-color: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+        .data-value {
+            font-weight: bold;
+            color: #38bdf8;
+            font-family: monospace;
+            font-size: 1.1rem;
+        }
+        .instruction {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            line-height: 1.5;
+            background: #1e293b;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #f59e0b;
+        }
+        .btn {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn:hover { background-color: #1d4ed8; }
+        
+        /* 无限网格模式UI */
+        #infinite-overlay {
+            display: none;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(15, 23, 42, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #8b5cf6;
+            width: 340px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        #inf-step-title {
+            color: #c4b5fd;
+            margin-top: 0;
+            border-bottom: 1px solid #4c1d95;
+            padding-bottom: 8px;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <!-- 渲染画布 -->
+        <canvas id="simCanvas"></canvas>
+        
+        <!-- 无限网格教学覆盖层 -->
+        <div id="infinite-overlay">
+            <h3 id="inf-step-title">无限网格叠加原理</h3>
+            <p id="inf-step-text" style="font-size:0.95rem; line-height:1.6; color:#e2e8f0; min-height:150px;"></p>
+            
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button id="inf-prev-btn" class="btn" style="flex:1; background-color:#475569;">上一步</button>
+                <button id="inf-next-btn" class="btn" style="flex:1; background-color:#8b5cf6;">下一步</button>
+            </div>
+            <button id="inf-exit-btn" class="btn" style="width:100%; margin-top:10px; background-color:#ef4444;">退出理论模型</button>
+        </div>
+    </div>
+
+    <!-- 控制面板 -->
+    <div id="control-panel">
+        <h2>⚡ 电阻网格控制台</h2>
+        
+        <div class="instruction">
+            <strong>操作指引：</strong><br>
+            在左侧网格上点击节点：<br>
+            🔴 第1次点击：选择电流输入端 (A)<br>
+            🔵 第2次点击：选择电流输出端 (B)<br>
+            💡 观察对称节点的电势，理解桥式电路的化简！
+        </div>
+
+        <div class="control-group">
+            <label>网格列数 (M): <span id="cols-val">4</span></label>
+            <input type="range" id="cols-slider" min="2" max="8" step="1" value="4">
+        </div>
+
+        <div class="control-group">
+            <label>网格行数 (N): <span id="rows-val">4</span></label>
+            <input type="range" id="rows-slider" min="2" max="8" step="1" value="4">
+        </div>
+
+        <div class="control-group">
+            <label>基础阻值 R (Ω): <span id="r-val">10</span></label>
+            <input type="range" id="r-slider" min="1" max="100" step="1" value="10">
+        </div>
+
+        <div class="control-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
+            <label style="margin:0;">显示电流动画</label>
+            <input type="checkbox" id="anim-toggle" checked style="width:20px; height:20px;">
+        </div>
+        
+        <div class="control-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
+            <label style="margin:0;">显示电势数值(%)</label>
+            <input type="checkbox" id="voltage-toggle" checked style="width:20px; height:20px;">
+        </div>
+
+        <button class="btn" id="reset-btn">重置状态</button>
+        <button class="btn" id="infinite-btn" style="background-color: #8b5cf6; margin-top: 5px;">🌌 无限网格求解演示</button>
+
+        <!-- 数据看板 -->
+        <div id="dashboard">
+            <h3 style="margin-top:0; color:#cbd5e1; font-size:1rem;">实时物理量</h3>
+            <div class="data-item">
+                <span>等效电阻 (Req):</span>
+                <span class="data-value" id="req-display">-- Ω</span>
+            </div>
+            <div class="data-item">
+                <span>总输入电流 (I):</span>
+                <span class="data-value" id="curr-display">1.00 A</span>
+            </div>
+            <div style="font-size:0.75rem; color:#64748b; margin-top:5px;">
+                * 假设输入电流恒为 1A，等效电阻在数值上等于A与B之间的电势差。
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 物理引擎与渲染脚本
+         * 采用节点电压法 (Node Voltage Method) 求解电路。
+         * 建立电导矩阵 G，求解 G * V = I。
+         */
+         
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 界面元素
+        const colsSlider = document.getElementById('cols-slider');
+        const rowsSlider = document.getElementById('rows-slider');
+        const rSlider = document.getElementById('r-slider');
+        const animToggle = document.getElementById('anim-toggle');
+        const voltageToggle = document.getElementById('voltage-toggle');
+        const resetBtn = document.getElementById('reset-btn');
+        const infiniteBtn = document.getElementById('infinite-btn');
+        const infOverlay = document.getElementById('infinite-overlay');
+        const infPrevBtn = document.getElementById('inf-prev-btn');
+        const infNextBtn = document.getElementById('inf-next-btn');
+        const infExitBtn = document.getElementById('inf-exit-btn');
+        const infStepText = document.getElementById('inf-step-text');
+        
+        // 物理状态
+        let cols = parseInt(colsSlider.value);
+        let rows = parseInt(rowsSlider.value);
+        let R0 = parseFloat(rSlider.value);
+        
+        let nodes = []; // 节点数组
+        let edges = []; // 边数组
+        
+        let nodeA = null; // 输入节点 index
+        let nodeB = null; // 输出节点 index
+        
+        let nodeVoltages = []; // 每个节点的电势
+        let branchCurrents = []; // 对应edges的电流大小和方向
+        let Req = 0;
+        
+        // 动画粒子数组
+        let particles = []; 
+        let lastTime = 0;
+
+        // 无限网格模式状态
+        let isInfiniteMode = false;
+        let infStep = 1; // 1, 2, 3
+        let infAnimProgress = 0;
+        let savedState = {}; // 保存进入前的状态
+        
+        const infTexts = [
+            "",
+            "<b>第一步：单点注入</b><br><br>假设网格向外无限延伸。我们在节点A注入电流 <b>I</b>。<br><br>由于空间完全对称，电流必然均等地分给4条相邻支路。每条支路流出的电流为 <span style='color:#ef4444;font-weight:bold'>I/4</span>。",
+            "<b>第二步：单点抽出</b><br><br>现在只看节点B。假设电流从无限远返回，并从B点抽出电流 <b>I</b>。<br><br>同理根据对称性，必定有电流从4个方向均等地流入B。每条支路流入的电流为 <span style='color:#3b82f6;font-weight:bold'>I/4</span>。",
+            "<b>第三步：电流叠加</b><br><br>真实情况是同时注入和抽出，我们将前两步直接叠加！<br><br>在A、B之间的直接连线上，两次电流方向重合：<br>I_AB = I/4 + I/4 = <b>I/2</b><br><br>此时 U_AB = I_AB × R = (I/2)R。<br>所以等效电阻 Req = U_AB / I = <span style='color:#eab308;font-size:1.2rem;font-weight:bold'>R / 2</span>！"
+        ];
+
+        // 初始化Canvas尺寸
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            // 设置一个合适的正方形或矩形，留出边距
+            let size = Math.min(container.clientWidth - 40, container.clientHeight - 40);
+            canvas.width = container.clientWidth - 40;
+            canvas.height = container.clientHeight - 40;
+            buildGrid();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // 监听控制面板
+        function updateParams() {
+            cols = parseInt(colsSlider.value);
+            rows = parseInt(rowsSlider.value);
+            R0 = parseFloat(rSlider.value);
+            
+            document.getElementById('cols-val').innerText = cols;
+            document.getElementById('rows-val').innerText = rows;
+            document.getElementById('r-val').innerText = R0;
+            
+            nodeA = null;
+            nodeB = null;
+            buildGrid();
+        }
+
+        colsSlider.addEventListener('input', updateParams);
+        rowsSlider.addEventListener('input', updateParams);
+        rSlider.addEventListener('input', () => {
+            if (isInfiniteMode) {
+                R0 = parseFloat(rSlider.value);
+                document.getElementById('r-val').innerText = R0;
+                updateInfUI();
+                return;
+            }
+            R0 = parseFloat(rSlider.value);
+            document.getElementById('r-val').innerText = R0;
+            solveCircuit(); // 只变阻值不需重构网格，直接重算
+        });
+        
+        resetBtn.addEventListener('click', updateParams);
+
+        // 无限网格模式交互逻辑
+        infiniteBtn.addEventListener('click', () => {
+            isInfiniteMode = true;
+            infStep = 1;
+            // 保存当前状态
+            savedState = {
+                cols: colsSlider.value,
+                rows: rowsSlider.value,
+                nodeA: nodeA,
+                nodeB: nodeB
+            };
+            
+            // 强制设置为较大的7x7奇数网格以保证中心对称
+            colsSlider.value = 7;
+            rowsSlider.value = 7;
+            updateParams();
+            
+            // 选取中心相邻的两个节点 (第3行, 第2和第3列)
+            nodeA = 3 * 7 + 2; // 23
+            nodeB = 3 * 7 + 3; // 24
+            
+            // 禁用普通控制
+            colsSlider.disabled = true;
+            rowsSlider.disabled = true;
+            
+            infOverlay.style.display = 'block';
+            updateInfUI();
+        });
+        
+        function updateInfUI() {
+            infStepText.innerHTML = infTexts[infStep];
+            infPrevBtn.disabled = (infStep === 1);
+            infNextBtn.disabled = (infStep === 3);
+            infPrevBtn.style.opacity = (infStep === 1) ? 0.5 : 1;
+            infNextBtn.style.opacity = (infStep === 3) ? 0.5 : 1;
+            infAnimProgress = 0; // 重置动画进度
+            
+            if (infStep === 3) {
+                document.getElementById('req-display').innerText = (R0 / 2).toFixed(3) + " Ω (理论值)";
+                document.getElementById('curr-display').innerText = "1.00 A (理论值)";
+            } else {
+                document.getElementById('req-display').innerText = "-- Ω";
+                document.getElementById('curr-display').innerText = "-- A";
+            }
+        }
+        
+        infPrevBtn.addEventListener('click', () => { if(infStep > 1) { infStep--; updateInfUI(); }});
+        infNextBtn.addEventListener('click', () => { if(infStep < 3) { infStep++; updateInfUI(); }});
+        infExitBtn.addEventListener('click', () => {
+            isInfiniteMode = false;
+            infOverlay.style.display = 'none';
+            colsSlider.disabled = false;
+            rowsSlider.disabled = false;
+            
+            // 恢复状态
+            colsSlider.value = savedState.cols;
+            rowsSlider.value = savedState.rows;
+            updateParams();
+            nodeA = savedState.nodeA;
+            nodeB = savedState.nodeB;
+            solveCircuit();
+        });
+
+        // 构建网格节点与拓扑
+        function buildGrid() {
+            nodes = [];
+            edges = [];
+            
+            // 计算绘制参数
+            const marginX = 80;
+            const marginY = 80;
+            const usableWidth = canvas.width - marginX * 2;
+            const usableHeight = canvas.height - marginY * 2;
+            
+            const cellW = usableWidth / (cols - 1);
+            const cellH = usableHeight / (rows - 1);
+            
+            // 生成节点
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    nodes.push({
+                        id: r * cols + c,
+                        r: r,
+                        c: c,
+                        x: marginX + c * cellW,
+                        y: marginY + r * cellH
+                    });
+                }
+            }
+            
+            // 生成边 (仅水平和垂直连接)
+            let edgeId = 0;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let u = r * cols + c;
+                    // 向右的边
+                    if (c < cols - 1) {
+                        let v = r * cols + (c + 1);
+                        edges.push({ id: edgeId++, u: u, v: v, current: 0 });
+                    }
+                    // 向下的边
+                    if (r < rows - 1) {
+                        let v = (r + 1) * cols + c;
+                        edges.push({ id: edgeId++, u: u, v: v, current: 0 });
+                    }
+                }
+            }
+            
+            nodeVoltages = new Array(nodes.length).fill(0);
+            particles = [];
+            solveCircuit();
+        }
+
+        // --- 核心物理算法：高斯消元法求解基尔霍夫节点电压方程 ---
+        function solveLinearSystem(M) {
+            let n = M.length;
+            // 高斯消元
+            for (let i = 0; i < n; i++) {
+                // 主元选取
+                let maxRow = i;
+                for (let k = i + 1; k < n; k++) {
+                    if (Math.abs(M[k][i]) > Math.abs(M[maxRow][i])) {
+                        maxRow = k;
+                    }
+                }
+                // 交换行
+                let temp = M[i];
+                M[i] = M[maxRow];
+                M[maxRow] = temp;
+                
+                if (Math.abs(M[i][i]) < 1e-10) continue; // 奇异矩阵或自由度
+                
+                // 消去当前列的其它行
+                for (let k = i + 1; k < n; k++) {
+                    let c = -M[k][i] / M[i][i];
+                    for (let j = i; j <= n; j++) {
+                        if (i === j) {
+                            M[k][j] = 0;
+                        } else {
+                            M[k][j] += c * M[i][j];
+                        }
+                    }
+                }
+            }
+            
+            // 回代求解
+            let x = new Array(n).fill(0);
+            for (let i = n - 1; i >= 0; i--) {
+                x[i] = M[i][n];
+                for (let k = i + 1; k < n; k++) {
+                    x[i] -= M[i][k] * x[k];
+                }
+                x[i] /= M[i][i];
+            }
+            return x;
+        }
+
+        function solveCircuit() {
+            let N = nodes.length;
+            nodeVoltages.fill(0);
+            edges.forEach(e => e.current = 0);
+            particles = [];
+            Req = 0;
+            
+            if (nodeA === null || nodeB === null) {
+                updateDashboard();
+                return;
+            }
+            if (nodeA === nodeB) {
+                updateDashboard();
+                return; // 两点重合，Req = 0
+            }
+
+            // 构建电导矩阵 G (尺寸 N x N)
+            // G[i][i] = 节点i相连的电导总和
+            // G[i][j] = -1/R (如果i和j直接相连)
+            let G = [];
+            for (let i = 0; i < N; i++) {
+                G.push(new Array(N).fill(0));
+            }
+            
+            let conductance = 1.0 / R0;
+            
+            edges.forEach(edge => {
+                let u = edge.u;
+                let v = edge.v;
+                G[u][u] += conductance;
+                G[v][v] += conductance;
+                G[u][v] -= conductance;
+                G[v][u] -= conductance;
+            });
+            
+            // 建立增广矩阵 M，大小 (N-1) x N (因为我们需要将 Node B 接地，即设定 Vb = 0)
+            // 所以从原矩阵中删去 node B 对应的行和列
+            let M = [];
+            for (let i = 0; i < N; i++) {
+                if (i === nodeB) continue; // 删去 B 行
+                let row = [];
+                for (let j = 0; j < N; j++) {
+                    if (j === nodeB) continue; // 删去 B 列
+                    row.push(G[i][j]);
+                }
+                // 加入常数项 I，假设从 A 注入 1A 电流
+                if (i === nodeA) {
+                    row.push(1.0);
+                } else {
+                    row.push(0.0);
+                }
+                M.push(row);
+            }
+            
+            // 求解约减后的线性方程组
+            let V_reduced = solveLinearSystem(M);
+            
+            // 重建完整节点电压向量
+            let vIndex = 0;
+            for (let i = 0; i < N; i++) {
+                if (i === nodeB) {
+                    nodeVoltages[i] = 0;
+                } else {
+                    nodeVoltages[i] = V_reduced[vIndex++];
+                }
+            }
+            
+            // 计算等效电阻：Req = (Va - Vb) / I_total = Va / 1.0 = Va
+            Req = nodeVoltages[nodeA];
+            
+            // 就算各支路电流方向与大小： I = (Vu - Vv) / R
+            edges.forEach(edge => {
+                let u = edge.u;
+                let v = edge.v;
+                let i_uv = (nodeVoltages[u] - nodeVoltages[v]) / R0;
+                edge.current = i_uv; // 如果为正，u流向v；如果为负，v流向u
+                
+                // 根据电流大小生成动画粒子
+                let currentMag = Math.abs(i_uv);
+                if (currentMag > 1e-5) {
+                    // 电流越大，粒子数量基数越大
+                    let numParticles = Math.max(1, Math.floor(currentMag * 15)); 
+                    for (let p = 0; p < numParticles; p++) {
+                        particles.push({
+                            edge: edge,
+                            progress: Math.random(), // 0 到 1 之间
+                            speed: currentMag * 0.5 + 0.1 // 基础速度 + 与电流成正比的速度
+                        });
+                    }
+                }
+            });
+            
+            updateDashboard();
+        }
+        
+        function updateDashboard() {
+            if (nodeA === null || nodeB === null) {
+                document.getElementById('req-display').innerText = "-- Ω";
+                return;
+            }
+            if (nodeA === nodeB) {
+                document.getElementById('req-display').innerText = "0.00 Ω";
+                return;
+            }
+            document.getElementById('req-display').innerText = Req.toFixed(3) + " Ω";
+        }
+
+        // 交互处理：鼠标点击选点
+        canvas.addEventListener('mousedown', (e) => {
+            if (isInfiniteMode) return; // 无限模式下禁止选点
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // 寻找被点击的节点
+            let clickedNode = null;
+            let minDist = 20; // 交互判定半径
+            
+            for (let i = 0; i < nodes.length; i++) {
+                let node = nodes[i];
+                let dist = Math.hypot(node.x - mouseX, node.y - mouseY);
+                if (dist < minDist) {
+                    clickedNode = i;
+                    break;
+                }
+            }
+            
+            if (clickedNode !== null) {
+                if (nodeA === null) {
+                    nodeA = clickedNode;
+                } else if (nodeB === null) {
+                    if (clickedNode !== nodeA) {
+                        nodeB = clickedNode;
+                    }
+                } else {
+                    // 第三次点击，重置状态
+                    nodeA = clickedNode;
+                    nodeB = null;
+                }
+                solveCircuit();
+            }
+        });
+
+        // 渲染循环
+        function draw(timestamp) {
+            let dt = (timestamp - lastTime) / 1000;
+            if (dt > 0.1) dt = 0.1;
+            lastTime = timestamp;
+            
+            if (isInfiniteMode) {
+                drawInfiniteScene(dt);
+                requestAnimationFrame(draw);
+                return;
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 1. 绘制连线 (阻力/电流表现)
+            edges.forEach(edge => {
+                let uNode = nodes[edge.u];
+                let vNode = nodes[edge.v];
+                
+                let currentMag = Math.abs(edge.current);
+                
+                // 基础线段
+                ctx.beginPath();
+                ctx.moveTo(uNode.x, uNode.y);
+                ctx.lineTo(vNode.x, vNode.y);
+                
+                if (currentMag < 1e-5) {
+                    // 无电流：暗色细线
+                    ctx.strokeStyle = "#334155";
+                    ctx.lineWidth = 2;
+                } else {
+                    // 有电流：根据电流大小加粗发光
+                    let maxCurrent = 1.0; // 假设最大支路电流接近1A
+                    let intensity = Math.min(1, currentMag / maxCurrent);
+                    
+                    // 电流越大，越亮，线越粗
+                    ctx.strokeStyle = `rgba(234, 179, 8, ${0.3 + 0.7 * intensity})`;
+                    ctx.lineWidth = 2 + 6 * intensity;
+                    ctx.lineCap = "round";
+                    
+                    // 发光效果
+                    ctx.shadowBlur = 10 * intensity;
+                    ctx.shadowColor = "#eab308";
+                }
+                ctx.stroke();
+                
+                // 重置阴影
+                ctx.shadowBlur = 0;
+            });
+            
+            // 2. 绘制电流粒子动画
+            if (animToggle.checked && nodeA !== null && nodeB !== null) {
+                particles.forEach(p => {
+                    // 更新进度
+                    p.progress += p.speed * dt;
+                    if (p.progress >= 1) {
+                        p.progress -= 1;
+                    }
+                    
+                    let uNode = nodes[p.edge.u];
+                    let vNode = nodes[p.edge.v];
+                    let current = p.edge.current;
+                    
+                    // 确定粒子移动的起点和终点 (根据电流正负方向)
+                    let startX, startY, endX, endY;
+                    if (current > 0) {
+                        startX = uNode.x; startY = uNode.y;
+                        endX = vNode.x; endY = vNode.y;
+                    } else {
+                        startX = vNode.x; startY = vNode.y;
+                        endX = uNode.x; endY = uNode.y;
+                    }
+                    
+                    let currX = startX + (endX - startX) * p.progress;
+                    let currY = startY + (endY - startY) * p.progress;
+                    
+                    ctx.beginPath();
+                    ctx.arc(currX, currY, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = "#fbbf24";
+                    ctx.fill();
+                    // 发光
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = "#fef08a";
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                });
+            }
+            
+            // 3. 绘制节点
+            let showVoltage = voltageToggle.checked && nodeA !== null && nodeB !== null && nodeA !== nodeB;
+            
+            nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+                
+                if (node.id === nodeA) {
+                    ctx.fillStyle = "#ef4444"; // 输入端 红色
+                    // 输入光晕
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = "#ef4444";
+                } else if (node.id === nodeB) {
+                    ctx.fillStyle = "#3b82f6"; // 输出端 蓝色
+                    // 输出光晕
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = "#3b82f6";
+                } else {
+                    ctx.fillStyle = "#94a3b8"; // 普通节点
+                    ctx.shadowBlur = 0;
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                // 外圈边框
+                ctx.strokeStyle = "#1e293b";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // 4. 绘制电势百分比文本 (教学核心)
+                // 归一化电势：最高电势设为100%，最低为0%
+                if (showVoltage) {
+                    let maxV = nodeVoltages[nodeA];
+                    let v = nodeVoltages[node.id];
+                    let percentage = maxV > 0 ? (v / maxV) * 100 : 0;
+                    
+                    ctx.fillStyle = "#cbd5e1";
+                    ctx.font = "12px monospace";
+                    ctx.textAlign = "center";
+                    // 稍微偏移一点避免挡住圆点
+                    ctx.fillText(percentage.toFixed(1) + "%", node.x, node.y - 15);
+                }
+            });
+            
+            // 如果没选点，绘制提示文字
+            if (nodeA === null) {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+                ctx.font = "20px 'Segoe UI', sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("请点击网格节点，选择电流输入端 (A)", canvas.width / 2, 40);
+            } else if (nodeB === null) {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+                ctx.font = "20px 'Segoe UI', sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("已选择输入端 (红色)，请点击另一个节点作为输出端 (B)", canvas.width / 2, 40);
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // --- 绘制无限大网格专用场景 ---
+        function drawInfiniteScene(dt) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            infAnimProgress += dt * 0.7; // 动画速度
+            if (infAnimProgress > 1) infAnimProgress -= 1;
+            
+            let nA = nodes[nodeA];
+            let nB = nodes[nodeB];
+            let centerX = (nA.x + nB.x) / 2;
+            let centerY = nA.y;
+            let maxDist = Math.min(canvas.width, canvas.height) * 0.55;
+            
+            // 1. 绘制背景网格边 (带渐隐衰减，模拟无限远)
+            edges.forEach(edge => {
+                let uNode = nodes[edge.u];
+                let vNode = nodes[edge.v];
+                let edgeCX = (uNode.x + vNode.x) / 2;
+                let edgeCY = (uNode.y + vNode.y) / 2;
+                let dist = Math.hypot(edgeCX - centerX, edgeCY - centerY);
+                let alpha = Math.max(0, 1 - Math.pow(dist / maxDist, 1.8));
+                
+                if (alpha <= 0) return;
+                
+                // 判断是否是特殊的边 (与A或B相连)
+                let isConnA = (edge.u === nodeA || edge.v === nodeA);
+                let isConnB = (edge.u === nodeB || edge.v === nodeB);
+                let isAB = isConnA && isConnB;
+                
+                ctx.beginPath();
+                ctx.moveTo(uNode.x, uNode.y);
+                ctx.lineTo(vNode.x, vNode.y);
+                
+                // 默认颜色
+                ctx.strokeStyle = `rgba(51, 65, 85, ${alpha})`;
+                ctx.lineWidth = 2;
+                
+                // 高亮逻辑
+                if (infStep === 1 && isConnA) {
+                    ctx.strokeStyle = `rgba(239, 68, 68, ${alpha})`;
+                    ctx.lineWidth = 4;
+                } else if (infStep === 2 && isConnB) {
+                    ctx.strokeStyle = `rgba(59, 130, 246, ${alpha})`;
+                    ctx.lineWidth = 4;
+                } else if (infStep === 3) {
+                    if (isAB) {
+                        ctx.strokeStyle = `rgba(234, 179, 8, ${alpha})`; // 黄色高亮
+                        ctx.lineWidth = 8;
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = "#eab308";
+                    } else if (isConnA) {
+                        ctx.strokeStyle = `rgba(239, 68, 68, ${alpha * 0.7})`;
+                        ctx.lineWidth = 3;
+                    } else if (isConnB) {
+                        ctx.strokeStyle = `rgba(59, 130, 246, ${alpha * 0.7})`;
+                        ctx.lineWidth = 3;
+                    }
+                }
+                
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                
+                // 绘制动画粒子
+                if (infStep === 1 && isConnA) {
+                    let from = (edge.u === nodeA) ? uNode : vNode;
+                    let to = (edge.u === nodeA) ? vNode : uNode;
+                    drawParticle(from, to, infAnimProgress, "#ef4444");
+                } else if (infStep === 2 && isConnB) {
+                    let to = (edge.u === nodeB) ? uNode : vNode;
+                    let from = (edge.u === nodeB) ? vNode : uNode;
+                    drawParticle(from, to, infAnimProgress, "#3b82f6");
+                } else if (infStep === 3) {
+                    if (isAB) {
+                        // 连线段粒子密度加倍
+                        let p1 = (infAnimProgress * 1.5) % 1.0;
+                        let p2 = (infAnimProgress * 1.5 + 0.5) % 1.0;
+                        drawParticle(nA, nB, p1, "#eab308", 4);
+                        drawParticle(nA, nB, p2, "#eab308", 4);
+                    } else if (isConnA) {
+                        let from = (edge.u === nodeA) ? uNode : vNode;
+                        let to = (edge.u === nodeA) ? vNode : uNode;
+                        drawParticle(from, to, infAnimProgress, "#ef4444");
+                    } else if (isConnB) {
+                        let to = (edge.u === nodeB) ? uNode : vNode;
+                        let from = (edge.u === nodeB) ? vNode : uNode;
+                        drawParticle(from, to, infAnimProgress, "#3b82f6");
+                    }
+                }
+            });
+            
+            // 2. 绘制文本标签
+            ctx.font = "14px monospace";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "white";
+            
+            let cellW = (canvas.width - 160) / (cols - 1);
+            let offset = cellW * 0.35;
+            
+            if (infStep === 1 || infStep === 3) {
+                if (infStep === 1) {
+                    ctx.fillText("I/4", nA.x, nA.y - offset);
+                    ctx.fillText("I/4", nA.x, nA.y + offset);
+                    ctx.fillText("I/4", nA.x - offset, nA.y);
+                    ctx.fillText("I/4", nA.x + offset, nA.y - 15);
+                }
+            }
+            if (infStep === 2 || infStep === 3) {
+                if (infStep === 2) {
+                    ctx.fillText("I/4", nB.x, nB.y - offset);
+                    ctx.fillText("I/4", nB.x, nB.y + offset);
+                    ctx.fillText("I/4", nB.x + offset, nB.y);
+                    ctx.fillText("I/4", nB.x - offset, nB.y - 15);
+                }
+            }
+            if (infStep === 3) {
+                ctx.fillStyle = "#fef08a";
+                ctx.font = "bold 16px monospace";
+                ctx.fillText("I/4 + I/4 = I/2", centerX, nA.y - 18);
+            }
+            
+            // 3. 绘制节点 (带渐隐)
+            nodes.forEach(node => {
+                let dist = Math.hypot(node.x - centerX, node.y - centerY);
+                let alpha = Math.max(0, 1 - Math.pow(dist / maxDist, 1.8));
+                if (alpha <= 0) return;
+                
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 6, 0, Math.PI * 2);
+                
+                if (node.id === nodeA && (infStep === 1 || infStep === 3)) {
+                    ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = "#ef4444";
+                    ctx.fill();
+                } else if (node.id === nodeB && (infStep === 2 || infStep === 3)) {
+                    ctx.fillStyle = `rgba(59, 130, 246, ${alpha})`;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = "#3b82f6";
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = `rgba(148, 163, 184, ${alpha})`;
+                    ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+            });
+        }
+        
+        function drawParticle(from, to, progress, color, radius = 3) {
+            let currX = from.x + (to.x - from.x) * progress;
+            let currY = from.y + (to.y - from.y) * progress;
+            ctx.beginPath();
+            ctx.arc(currX, currY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = color;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // 启动
+        resizeCanvas();
+        requestAnimationFrame(draw);
+
+    </script>
+</body>
+</html>
