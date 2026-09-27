@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多普勒效应：蜻蜓点水模拟器</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f141e;
+            color: #ecf0f1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #00cec9;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 15px rgba(0, 206, 201, 0.4);
+            letter-spacing: 1px;
+        }
+
+        .header p {
+            color: #bdc3c7;
+            margin: 0;
+            font-size: 15px;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1250px;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .visual-area {
+            position: relative;
+        }
+
+        canvas {
+            background: radial-gradient(circle at center, #1a2a40 0%, #0b111a 100%);
+            border-radius: 12px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.6);
+            border: 1px solid rgba(0, 206, 201, 0.2);
+        }
+
+        .panel {
+            background: rgba(25, 35, 50, 0.85);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            width: 360px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-group {
+            background: rgba(10, 15, 20, 0.4);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .control-group-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .color-source { color: #f1c40f; }
+        .color-observer { color: #2ecc71; }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13.5px;
+            margin-bottom: 6px;
+            color: #bdc3c7;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            height: 6px;
+            border-radius: 3px;
+            appearance: none;
+            background: #34495e;
+            outline: none;
+            margin-bottom: 10px;
+        }
+        
+        input[type="range"].slider-source::-webkit-slider-thumb {
+            appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #f1c40f; cursor: pointer;
+        }
+        input[type="range"].slider-observer::-webkit-slider-thumb {
+            appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #2ecc71; cursor: pointer;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .radio-btn {
+            flex: 1;
+            padding: 6px;
+            background: #2c3e50;
+            border: 1px solid #34495e;
+            color: #bdc3c7;
+            text-align: center;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .radio-btn.active.source { background: rgba(241, 196, 15, 0.2); border-color: #f1c40f; color: #f1c40f; font-weight: bold;}
+        .radio-btn.active.observer { background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #2ecc71; font-weight: bold;}
+
+        .dashboard {
+            background: #151b24;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #0984e3;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .dash-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+
+        .math-block {
+            background: #0b0f14;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            text-align: center;
+            font-family: 'Courier New', Courier, monospace;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .fraction {
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 5px;
+            text-align: center;
+        }
+
+        .numerator {
+            border-bottom: 1px solid #ecf0f1;
+            padding: 0 4px 2px 4px;
+        }
+
+        .denominator {
+            padding: 2px 4px 0 4px;
+        }
+
+        .val-highlight { color: #00cec9; font-weight: bold; font-size: 16px;}
+        .warning-text { color: #e74c3c; font-weight: bold; animation: pulse 1s infinite; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🌊 蜻蜓点水与多普勒效应 (Doppler Effect)</h1>
+        <p>通过水波的压缩与拉伸，直观理解声波频率的变化与推导公式</p>
+    </div>
+
+    <div class="main-container">
+        <!-- 左侧：可视化区域 -->
+        <div class="visual-area">
+            <canvas id="simCanvas" width="800" height="450"></canvas>
+        </div>
+
+        <!-- 右侧：控制面板与仪表盘 -->
+        <div class="panel">
+            
+            <!-- 新增：模式切换 -->
+            <div class="control-group">
+                <div class="radio-group" id="modeSelector">
+                    <div class="radio-btn active" data-mode="continuous">🌊 连续演练模式</div>
+                    <div class="radio-btn" data-mode="teaching">📖 原理教学模式</div>
+                </div>
+                
+                <!-- 新增：参考系切换 (默认隐藏，仅在教学模式显示) -->
+                <div id="refFrameGroup" style="display:none; margin-top:15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <div style="font-weight: bold; margin-bottom: 8px; font-size: 13.5px; color: #bdc3c7;">👁️ 观察参考系切换</div>
+                    <div class="radio-group" id="refSelector">
+                        <div class="radio-btn active" data-ref="ground">🌍 地面/水参考系</div>
+                        <div class="radio-btn" data-ref="observer" title="将视角固定在睡莲上，观察水面与声波的相对运动">🪷 观测者参考系</div>
+                    </div>
+                </div>
+
+                <button id="btnTeachReset" style="display:none; width:100%; margin-top:10px; padding:10px; background:#0984e3; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">▶️ 重新发射两波</button>
+            </div>
+
+            <!-- 波源控制 -->
+            <div class="control-group">
+                <div class="control-group-title color-source">🚁 波源 (蜻蜓) 控制</div>
+                <label>
+                    <span>速度大小 (Vs):</span>
+                    <span id="vsVal">0 px/s</span>
+                </label>
+                <input type="range" class="slider-source" id="vsSlider" min="0" max="180" step="1" value="0">
+                <div class="radio-group" id="vsDirGroup">
+                    <div class="radio-btn source" data-dir="-1">⬅️ 向左飞行</div>
+                    <div class="radio-btn source active" data-dir="1">向右飞行 ➡️</div>
+                </div>
+                <label style="margin-top:10px;">
+                    <span>点水频率 (f):</span>
+                    <span id="fVal">2.0 Hz</span>
+                </label>
+                <input type="range" class="slider-source" id="fSlider" min="1" max="5" step="0.5" value="2.0">
+            </div>
+
+            <!-- 观测者控制 -->
+            <div class="control-group">
+                <div class="control-group-title color-observer">🪷 观测者 (睡莲传感器) 控制</div>
+                <label>
+                    <span>速度大小 (Vo):</span>
+                    <span id="voVal">0 px/s</span>
+                </label>
+                <input type="range" class="slider-observer" id="voSlider" min="0" max="80" step="1" value="0">
+                <div class="radio-group" id="voDirGroup">
+                    <div class="radio-btn observer active" data-dir="-1">⬅️ 向左漂移</div>
+                    <div class="radio-btn observer" data-dir="1">向右漂移 ➡️</div>
+                </div>
+            </div>
+
+            <!-- 数据仪表盘 -->
+            <div class="dashboard">
+                <div style="color:#bdc3c7; font-weight:bold; margin-bottom:8px;">📊 物理遥测中心</div>
+                <div class="dash-row"><span>介质波速 (V):</span> <span style="color:#3498db;">100 px/s</span></div>
+                <div class="dash-row"><span>相对状态:</span> <span id="statusText" style="font-weight:bold;">保持相对静止</span></div>
+                
+                <div class="math-block">
+                    <div style="margin-bottom: 8px; color: #7f8c8d; font-size: 12px;">理论频率推导公式</div>
+                    f' = f₀ × 
+                    <div class="fraction">
+                        <div class="numerator">V <span id="signVo">+</span> <span id="mathVo">0</span></div>
+                        <div class="denominator">V <span id="signVs">-</span> <span id="mathVs">0</span></div>
+                    </div>
+                    = <span id="mathResult" class="val-highlight">2.00 Hz</span>
+                </div>
+
+                <div class="dash-row" style="margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 10px;">
+                    <span title="系统通过检测水波真实撞击传感器的频率计算得出">🎯 动画实测频率:</span> 
+                    <span id="measuredF" class="val-highlight" style="color: #fdcb6e;">等待水波...</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 物理常数与核心变量
+        const V_WAVE = 100; // 水波在介质中的传播速度 (px/s)
+        const CANVAS_W = canvas.width;
+        const CANVAS_H = canvas.height;
+        const CENTER_Y = CANVAS_H / 2;
+
+        let f_emit = 2.0; // 点水频率 Hz
+        
+        // 实体对象
+        let source = {
+            x: 200,
+            y: CENTER_Y,
+            mag: 0, // 速度大小
+            dir: 1  // 方向 (1 右, -1 左)
+        };
+
+        let observer = {
+            x: 600,
+            y: CENTER_Y,
+            mag: 0,
+            dir: -1,
+            prevX: 600
+        };
+
+        let waves = []; // 存储所有发出的水波
+        let hitFlashes = []; // 碰撞视觉特效
+
+        // 新增：教学模式状态
+        let appMode = 'continuous'; 
+        let isPaused = false;
+        let wavesEmitted = 0;
+        let ghostObserver = { active: false, x: 0, y: 0 }; // 记录观测者接收第一个波时的位置影像
+
+        // 新增：参考系状态变量
+        let refFrame = 'ground';
+        let observerInitialX = 600;
+
+        let lastEmitTime = 0;
+        let lastHitTime = 0;
+        let measured_f = 0; // 动画实测频率
+
+        let lastFrameTime = performance.now();
+
+        // UI 元素引用
+        const vsSlider = document.getElementById('vsSlider');
+        const vsVal = document.getElementById('vsVal');
+        const fSlider = document.getElementById('fSlider');
+        const fVal = document.getElementById('fVal');
+        const voSlider = document.getElementById('voSlider');
+        const voVal = document.getElementById('voVal');
+        
+        const signVo = document.getElementById('signVo');
+        const mathVo = document.getElementById('mathVo');
+        const signVs = document.getElementById('signVs');
+        const mathVs = document.getElementById('mathVs');
+        const mathResult = document.getElementById('mathResult');
+        const statusText = document.getElementById('statusText');
+        const measuredFDisp = document.getElementById('measuredF');
+
+        // 绑定滑块与按钮事件
+        vsSlider.addEventListener('input', e => { source.mag = parseInt(e.target.value); vsVal.textContent = source.mag + ' px/s'; });
+        voSlider.addEventListener('input', e => { observer.mag = parseInt(e.target.value); voVal.textContent = observer.mag + ' px/s'; });
+        fSlider.addEventListener('input', e => { f_emit = parseFloat(e.target.value); fVal.textContent = f_emit.toFixed(1) + ' Hz'; });
+
+        document.querySelectorAll('#vsDirGroup .radio-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                document.querySelectorAll('#vsDirGroup .radio-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                source.dir = parseInt(e.target.dataset.dir);
+            });
+        });
+
+        document.querySelectorAll('#voDirGroup .radio-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                document.querySelectorAll('#voDirGroup .radio-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                observer.dir = parseInt(e.target.dataset.dir);
+            });
+        });
+
+        // 新增：模式切换与重置事件
+        const btnTeachReset = document.getElementById('btnTeachReset');
+        const refFrameGroup = document.getElementById('refFrameGroup');
+        
+        document.querySelectorAll('#modeSelector .radio-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                document.querySelectorAll('#modeSelector .radio-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                appMode = e.target.dataset.mode;
+                
+                if (appMode === 'teaching') {
+                    btnTeachReset.style.display = 'block';
+                    refFrameGroup.style.display = 'block';
+                    resetTeachingSim();
+                } else {
+                    btnTeachReset.style.display = 'none';
+                    refFrameGroup.style.display = 'none';
+                    
+                    // 离开教学模式时，自动重置为地面参考系
+                    refFrame = 'ground';
+                    document.querySelectorAll('#refSelector .radio-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelector('#refSelector .radio-btn[data-ref="ground"]').classList.add('active');
+                    
+                    isPaused = false;
+                }
+            });
+        });
+
+        // 新增：参考系选择事件
+        document.querySelectorAll('#refSelector .radio-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                document.querySelectorAll('#refSelector .radio-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                refFrame = e.target.dataset.ref;
+            });
+        });
+
+        btnTeachReset.addEventListener('click', resetTeachingSim);
+
+        function resetTeachingSim() {
+            waves = [];
+            hitFlashes = [];
+            wavesEmitted = 0;
+            isPaused = false;
+            ghostObserver.active = false; // 重置虚影
+            source.x = 200; // 恢复初始位置以便完整观察
+            observer.x = 600;
+            observerInitialX = observer.x; // 记录观测者初始位置，用于参考系平移
+            lastEmitTime = performance.now(); 
+            lastHitTime = 0;
+            measuredFDisp.textContent = "等待水波...";
+            measuredFDisp.style.color = "#fdcb6e";
+        }
+
+        // 绘制蜻蜓 (波源)
+        function drawDragonfly(ctx, x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // 身体
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath(); ctx.ellipse(0, 0, 12, 3, 0, 0, Math.PI * 2); ctx.fill();
+            
+            // 翅膀
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath(); ctx.ellipse(2, -6, 4, 10, Math.PI/6, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(2, 6, 4, 10, -Math.PI/6, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(-3, -5, 3, 8, Math.PI/4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(-3, 5, 3, 8, -Math.PI/4, 0, Math.PI * 2); ctx.fill();
+            
+            // 头部
+            ctx.fillStyle = '#e67e22';
+            ctx.beginPath(); ctx.arc(10, 0, 3, 0, Math.PI * 2); ctx.fill();
+            
+            // 如果蜻蜓向左飞，水平翻转
+            if (source.dir === -1) {
+                // 因为已经画完了，为了简化逻辑，我们在实际应用中应该先判断再画，
+                // 但考虑到这是一个俯视图的点，可以忽略方向细节，仅加个速度箭头
+            }
+            
+            // 速度箭头
+            if (source.mag > 0) {
+                let arrowLen = source.mag * 0.3;
+                let sign = source.dir;
+                ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(sign * arrowLen, -15);
+                ctx.lineTo(sign * arrowLen - sign*4, -15 - 3);
+                ctx.moveTo(sign * arrowLen, -15); ctx.lineTo(sign * arrowLen - sign*4, -15 + 3);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // 绘制睡莲 (观测者)
+        function drawLilypad(ctx, x, y, isGhost = false) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            if (isGhost) {
+                ctx.globalAlpha = 0.4; // 虚影半透明
+            }
+            
+            // 莲叶
+            ctx.fillStyle = '#2ecc71';
+            ctx.beginPath(); 
+            ctx.arc(0, 0, 14, Math.PI/4, Math.PI*1.75); // 缺口
+            ctx.lineTo(0,0);
+            ctx.fill();
+            ctx.strokeStyle = '#27ae60'; ctx.lineWidth = 2; ctx.stroke();
+            
+            // 传感器中心点
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+
+            // 速度箭头
+            if (observer.mag > 0 && !isGhost) {
+                let arrowLen = observer.mag * 0.5;
+                let sign = observer.dir;
+                ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(sign * arrowLen, 20);
+                ctx.lineTo(sign * arrowLen - sign*4, 20 - 3);
+                ctx.moveTo(sign * arrowLen, 20); ctx.lineTo(sign * arrowLen - sign*4, 20 + 3);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function updateDashboard() {
+            // 物理约定：规定从 Source 指向 Observer 的方向为正方向。
+            // 这样公式可以统一为：f' = f * (V - Vo_vec) / (V - Vs_vec)
+            // 但为了科普更容易理解，我们使用相对靠近/远离的概念：
+            // 接近时：分子加 (Vo), 分母减 (Vs)
+            
+            let dx = observer.x - source.x;
+            if (dx === 0) dx = 0.001; // 避免同位报错
+            let dir_S_to_O = Math.sign(dx); // 1 表示观测者在右侧，-1 表示观测者在左侧
+
+            // 计算有效速度 (正值代表向对方运动)
+            let vs_effective = source.mag * source.dir * dir_S_to_O;
+            let vo_effective = observer.mag * observer.dir * (-dir_S_to_O);
+
+            // 更新公式 UI
+            mathVo.textContent = Math.abs(vo_effective).toFixed(0);
+            signVo.textContent = vo_effective >= 0 ? "+" : "-";
+            signVo.style.color = vo_effective >= 0 ? "#2ecc71" : "#e74c3c";
+
+            mathVs.textContent = Math.abs(vs_effective).toFixed(0);
+            signVs.textContent = vs_effective >= 0 ? "-" : "+"; // 分母中：靠近是减
+            signVs.style.color = vs_effective >= 0 ? "#2ecc71" : "#e74c3c";
+
+            // 计算理论结果
+            let denominator = V_WAVE - vs_effective;
+            
+            if (denominator <= 0) {
+                // 超音速 / 音爆情况
+                mathResult.innerHTML = "<span class='warning-text'>∞ (激波/音爆)</span>";
+                statusText.textContent = "🚀 波源超音速！水波堆叠产生激波面";
+                statusText.style.color = "#e74c3c";
+            } else {
+                let f_prime = f_emit * (V_WAVE + vo_effective) / denominator;
+                
+                // 处理观测者逃逸情况
+                if (V_WAVE + vo_effective < 0) {
+                    f_prime = 0; // 观测者跑得比波快，永远听不到
+                    mathResult.textContent = "0.00 Hz";
+                    statusText.textContent = "🏃‍♂️ 观测者逃逸！水波无法追上";
+                    statusText.style.color = "#bdc3c7";
+                } else {
+                    mathResult.textContent = f_prime.toFixed(2) + " Hz";
+                    
+                    if (f_prime > f_emit + 0.01) {
+                        statusText.textContent = "🟦 相对靠近，波长压缩 (频率升高 / 蓝移)";
+                        statusText.style.color = "#00cec9";
+                    } else if (f_prime < f_emit - 0.01) {
+                        statusText.textContent = "🟥 相对远离，波长拉伸 (频率降低 / 红移)";
+                        statusText.style.color = "#e67e22";
+                    } else {
+                        statusText.textContent = "⚪ 相对静止，无多普勒效应";
+                        statusText.style.color = "#bdc3c7";
+                    }
+                }
+            }
+        }
+
+        function loop(timestamp) {
+            let rawDt = (timestamp - lastFrameTime) / 1000;
+            lastFrameTime = timestamp;
+            if (rawDt > 0.1) rawDt = 0.1; // 防止切屏导致步长过大跳帧
+
+            let dt = isPaused ? 0 : rawDt;
+
+            // 1. 更新实体位置 (含边缘反弹逻辑)
+            source.x += source.mag * source.dir * dt;
+            if (source.x < 30) { source.x = 30; source.dir = 1; updateDirUI('vs', 1); }
+            if (source.x > CANVAS_W - 30) { source.x = CANVAS_W - 30; source.dir = -1; updateDirUI('vs', -1); }
+
+            observer.prevX = observer.x;
+            observer.x += observer.mag * observer.dir * dt;
+            if (observer.x < 30) { observer.x = 30; observer.dir = 1; updateDirUI('vo', 1); }
+            if (observer.x > CANVAS_W - 30) { observer.x = CANVAS_W - 30; observer.dir = -1; updateDirUI('vo', -1); }
+
+            function updateDirUI(prefix, dir) {
+                document.querySelectorAll(`#${prefix}DirGroup .radio-btn`).forEach(b => {
+                    b.classList.remove('active');
+                    if (parseInt(b.dataset.dir) === dir) b.classList.add('active');
+                });
+            }
+
+            // 2. 发射水波
+            if (timestamp - lastEmitTime > (1000 / f_emit)) {
+                if (!isPaused) {
+                    waves.push({
+                        id: wavesEmitted,
+                        cx: source.x,
+                        cy: source.y,
+                        r: 0,
+                        prevR: 0,
+                        hitObserver: false
+                    });
+                    wavesEmitted++;
+                    
+                    // 发射瞬间给蜻蜓加个小涟漪特效
+                    hitFlashes.push({ x: source.x, y: source.y, r: 0, maxR: 15, alpha: 0.8, color: '155, 89, 182' });
+                }
+                lastEmitTime = timestamp;
+            }
+
+            // 3. 水波扩散与精确碰撞检测
+            ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+            // --- 新增：计算并应用参考系偏移量 (伽利略变换) ---
+            let offsetX = 0;
+            if (appMode === 'teaching' && refFrame === 'observer') {
+                // 观测者视角下，观测者始终在初始位置，所以所有物体都要反向偏移
+                offsetX = observer.x - observerInitialX;
+            }
+            
+            ctx.save();
+            ctx.translate(-offsetX, 0);
+
+            // --- 新增：绘制介质参考网格 (体现水面的相对运动) ---
+            if (appMode === 'teaching' && refFrame === 'observer') {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-1000, CENTER_Y);
+                ctx.lineTo(2000, CENTER_Y);
+                for(let i = -1000; i <= 2000; i+= 50) {
+                    ctx.moveTo(i, CENTER_Y - 8);
+                    ctx.lineTo(i, CENTER_Y + 8);
+                }
+                ctx.stroke();
+            }
+
+            for (let i = waves.length - 1; i >= 0; i--) {
+                let w = waves[i];
+                w.prevR = w.r;
+                w.r += V_WAVE * dt;
+
+                // 碰撞检测逻辑：如果上一帧观测者在波的外侧(或波还未到达)，当前帧在波的内侧，说明波恰好扫过观测者。
+                // 由于是在同一水平线上，D = |obs.x - w.cx|
+                let prevDist = Math.abs(observer.prevX - w.cx);
+                let currDist = Math.abs(observer.x - w.cx);
+                
+                // 严谨穿越检测
+                if (!w.hitObserver && w.prevR < prevDist && w.r >= currDist) {
+                    w.hitObserver = true; // 标记已击中
+                    
+                    if (appMode === 'teaching') {
+                        if (w.id === 0) {
+                            // 接收到第一个波时，记录当前位置留下虚影
+                            ghostObserver.x = observer.x;
+                            ghostObserver.y = observer.y;
+                            ghostObserver.active = true;
+                        } else if (w.id === 1) {
+                            isPaused = true; // 接收到第二个波时暂停
+                        }
+                    }
+
+                    // 计算实测频率
+                    if (lastHitTime > 0) {
+                        let timeDiff = (timestamp - lastHitTime) / 1000;
+                        measured_f = 1 / timeDiff;
+                        measuredFDisp.textContent = measured_f.toFixed(2) + " Hz";
+                        
+                        // 给予视觉反馈颜色
+                        if (measured_f > f_emit + 0.1) measuredFDisp.style.color = "#00cec9"; // 高频变蓝
+                        else if (measured_f < f_emit - 0.1) measuredFDisp.style.color = "#e67e22"; // 低频变红
+                        else measuredFDisp.style.color = "#fdcb6e";
+                    }
+                    lastHitTime = timestamp;
+
+                    // 触发传感器闪光特效
+                    hitFlashes.push({ x: observer.x, y: observer.y, r: 0, maxR: 30, alpha: 1, color: '46, 204, 113' });
+                }
+
+                // 绘制水波
+                ctx.beginPath();
+                ctx.arc(w.cx, w.cy, w.r, 0, Math.PI * 2);
+                let alpha = Math.max(0, 1 - (w.r / 600)); // 波越大越透明
+                
+                if (appMode === 'teaching' && w.id === 0) {
+                    ctx.strokeStyle = `rgba(231, 76, 60, ${Math.min(1, alpha + 0.5)})`; // 教学模式红色高亮第一个波
+                    ctx.lineWidth = 2.5;
+                } else {
+                    ctx.strokeStyle = `rgba(0, 206, 201, ${alpha})`;
+                    ctx.lineWidth = 1.5;
+                }
+                ctx.stroke();
+
+                // 新增：在观测者参考系下，标注第一个水波的相对速度
+                if (appMode === 'teaching' && w.id === 0 && refFrame === 'observer') {
+                    let dirToObs = Math.sign(observer.x - w.cx) || 1;
+                    // 如果观测者相向而行，相对速度为 V + Vo；如果同向而行，为 V - Vo
+                    let isApproaching = (observer.mag * observer.dir * dirToObs) < 0;
+                    let v_rel = V_WAVE - (observer.mag * observer.dir * dirToObs);
+                    let signStr = isApproaching ? '+' : '-';
+                    
+                    let textX = w.cx + w.r * dirToObs;
+                    let textY = w.cy - 15;
+                    
+                    ctx.fillStyle = "rgba(231, 76, 60, 1)";
+                    ctx.font = "bold 13px Arial";
+                    ctx.textAlign = dirToObs === 1 ? "right" : "left";
+                    
+                    ctx.fillText(`相对波速 (V${signStr}Vo) = ${v_rel} px/s`, textX + (dirToObs * -10), textY);
+                    
+                    // 绘制相对速度矢量箭头
+                    ctx.beginPath();
+                    let arrowStartX = textX + (dirToObs * -10);
+                    let arrowEndX = arrowStartX + dirToObs * (v_rel * 0.3); // 缩放箭头长度
+                    ctx.moveTo(arrowStartX, textY + 6);
+                    ctx.lineTo(arrowEndX, textY + 6);
+                    ctx.lineTo(arrowEndX - dirToObs * 5, textY + 2);
+                    ctx.moveTo(arrowEndX, textY + 6);
+                    ctx.lineTo(arrowEndX - dirToObs * 5, textY + 10);
+                    ctx.strokeStyle = "rgba(231, 76, 60, 1)";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // 移除屏幕外过大的波
+                if (w.r > 1000) waves.splice(i, 1);
+            }
+
+            // 4. 绘制闪光特效
+            for (let i = hitFlashes.length - 1; i >= 0; i--) {
+                let flash = hitFlashes[i];
+                flash.r += 60 * dt; // 扩散速度
+                flash.alpha -= 1.5 * dt;
+                
+                if (flash.alpha <= 0) {
+                    hitFlashes.splice(i, 1);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(flash.x, flash.y, flash.r, 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(${flash.color}, ${flash.alpha})`;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+            }
+
+            // 5. 绘制波源与观测者
+            drawDragonfly(ctx, source.x, source.y);
+            
+            // 在教学模式下绘制观测者接收第一波时的影像和辅助线 (仅在地面参考系显示)
+            if (appMode === 'teaching' && ghostObserver.active && refFrame !== 'observer') {
+                drawLilypad(ctx, ghostObserver.x, ghostObserver.y, true);
+                
+                // 绘制虚影到当前位置的虚线连线 (表示观测者在周期T内移动的距离)
+                ctx.beginPath();
+                ctx.moveTo(ghostObserver.x, ghostObserver.y);
+                ctx.lineTo(observer.x, observer.y);
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+                ctx.setLineDash([4, 4]);
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            drawLilypad(ctx, observer.x, observer.y);
+
+            ctx.restore(); // 恢复画布原本坐标系，准备绘制仪表盘(不随参考系移动)
+
+            // 更新仪表盘公式
+            updateDashboard();
+
+            requestAnimationFrame(loop);
+        }
+
+        // 启动主循环
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
